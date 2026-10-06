@@ -36,6 +36,18 @@ Browser (iPad)                    Vercel                 Supabase
   (MIT, in `web/vendor/`) für glatte, druckempfindliche Striche. Alle Karten nutzen
   ein festes 3:2-Koordinatensystem (600 × 400) und werden als 900 × 600 PNG gespeichert.
 
+## Grammatik
+
+- Inhalte liegen versioniert im Frontend: `web/grammar/{tenses,clauses,words}.js`
+  (Erklärung als HTML, Links, Übungen). Übungstypen: `c` = Auswahl, `g` = Lücke.
+  Lücken-Antworten werden normalisiert (Kurzformen wie *won't* = *will not*),
+  damit Eingaben per Apple-Pencil-Scribble funktionieren.
+- Übungs-IDs sind der Schlüssel für den Lernstand – nie ändern oder wiederverwenden.
+- Lernstand pro Benutzer und Übung in `grammar_progress` (Leitner-Box 0–5, nächste
+  Wiederholung nach 1, 3, 7, 14, 30 Tagen; falsch → sofort wieder fällig). Ab Box 3
+  gilt eine Übung als „sicher“. Jede Antwort landet in `grammar_reviews`.
+- Training: alle fälligen Übungen (max. 25), danach bis zu 10 neue in Themenreihenfolge.
+
 ## API
 
 | Methode | Pfad | |
@@ -51,4 +63,6 @@ Browser (iPad)                    Vercel                 Supabase
 | GET | `/cards` | alle Karten aller Stapel |
 | PUT/DELETE | `/cards/:id` | Karte ändern / löschen |
 | POST | `/cards/:id/review` | `{correct}` → neue Box & Zähler |
-| GET | `/stats` | `{today, streak}` |
+| GET | `/stats` | `{today, streak}` (Vokabeln + Grammatik) |
+| GET | `/grammar` | eigener Lernstand pro Grammatik-Übung |
+| POST | `/grammar/review` | `{item, correct}` → neue Box & Fälligkeit |
