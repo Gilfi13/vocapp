@@ -939,7 +939,12 @@ function judge(correct) {
       Object.assign(card, update);
       if (!wasKnown && cardStatus(card) === "known") s.nowKnown++;
     })
-    .catch(() => toast("Antwort konnte nicht gespeichert werden"));
+    .catch(() => {
+      // not saved: the card stays in the round so the answer isn't lost
+      if (!s.queue.includes(id)) s.queue.push(id);
+      storage(SESSION_KEY(s.deckId), s);
+      toast("Antwort nicht gespeichert – die Karte kommt nochmal dran");
+    });
   learn.pending.push(saving);
   showCurrentCard();
 }
@@ -960,6 +965,15 @@ document.addEventListener("keydown", (e) => {
 
 async function finishLearning() {
   const s = learn.session;
+  learn.revealed = false;
+  $("#judge").hidden = true;
+  $("#reveal-btn").hidden = true;
+  // wait until every answer is saved; failed ones come back into the round
+  await Promise.allSettled(learn.pending);
+  learn.pending = [];
+  if (learn.session !== s || !isVisible("view-learn")) return; // user left meanwhile
+  if (s.queue.length) return showCurrentCard();
+
   storage(SESSION_KEY(s.deckId), null);
   $("#done-stats").textContent =
     `${plural(s.total, "Karte", "Karten")} gelernt` +
@@ -967,9 +981,6 @@ async function finishLearning() {
   $("#done-progress").textContent = "";
   setBar($("#done-bar"), 0, 0, 0);
   show("view-done");
-  // show the new progress once all answers are saved
-  await Promise.allSettled(learn.pending);
-  learn.pending = [];
   const cards = [...learn.cards.values()];
   const c = countStatus(cards);
   setBar($("#done-bar"), c.known, c.learning, cards.length);
