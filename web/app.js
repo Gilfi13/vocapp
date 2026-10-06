@@ -1,4 +1,5 @@
 import { getStroke } from "./vendor/perfect-freehand.js";
+import { initGrammar } from "./grammar.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
@@ -503,6 +504,7 @@ let decks = [];
 
 async function showHome() {
   show("view-home");
+  grammar.refreshHome();
   try {
     const [deckList, stats] = await Promise.all([api("/decks"), api("/stats").catch(() => null)]);
     decks = deckList;
@@ -1009,6 +1011,8 @@ $$("[data-home]").forEach((b) =>
 /* ------------------------------------------------------------------ */
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
+
+const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible });
 
 if (storage(TOKEN_KEY)) start().catch(() => show("view-login"));
 else show("view-login");

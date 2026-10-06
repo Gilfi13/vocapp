@@ -221,6 +221,33 @@ Deno.serve(async (req) => {
       }
     }
 
+    /* ---------- grammar practice ---------- */
+
+    // GET /grammar – own progress per grammar exercise
+    if (method === "GET" && path === "/grammar") {
+      const { data, error } = await db
+        .from("grammar_progress")
+        .select("item_id, box, correct_count, wrong_count, last_reviewed, due_at")
+        .eq("user_id", uid);
+      if (error) throw error;
+      return json(data);
+    }
+
+    // POST /grammar/review {item, correct}
+    if (method === "POST" && path === "/grammar/review") {
+      const { item, correct } = await req.json();
+      if (typeof item !== "string" || !/^[a-z0-9-]{1,40}$/.test(item)) {
+        return json({ error: "Ungültige Übung" }, 400);
+      }
+      const { data, error } = await db.rpc("record_grammar_review", {
+        p_user: uid,
+        p_item: item,
+        p_correct: correct === true,
+      });
+      if (error) throw error;
+      return json(data);
+    }
+
     /* ---------- decks & cards of the logged-in user ---------- */
 
     // GET /decks – own decks with learning progress

@@ -63,6 +63,21 @@
         </div>
       </section>
 
+      <section class="panel grammar-card">
+        <div class="hero-head">
+          <div>
+            <p class="eyebrow">Grammatik</p>
+            <p class="hero-number"><strong id="gc-due">0</strong> <span id="gc-due-label">Übungen fällig</span></p>
+          </div>
+          <p class="muted small" id="gc-known"></p>
+        </div>
+        <div class="stackbar" id="gc-bar"><span class="known"></span><span class="learning"></span></div>
+        <div class="hero-actions">
+          <button id="gc-train" class="btn primary">Grammatik trainieren</button>
+          <button id="gc-topics" class="btn">Alle Themen &amp; Erklärungen</button>
+        </div>
+      </section>
+
       <div class="page-head">
         <h1>Meine Stapel</h1>
         <button id="new-deck-btn" class="btn primary">+ Neuer Stapel</button>
@@ -230,6 +245,93 @@
       <p class="muted small" id="done-progress"></p>
       <div class="row">
         <button id="again-btn" class="btn">Nochmal lernen</button>
+        <button class="btn primary" data-home>Zur Übersicht</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Grammar: topic list -->
+  <section id="view-grammar" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-home>← Übersicht</button>
+      <div class="title">Grammatik</div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page">
+      <section class="hero">
+        <div class="hero-head">
+          <div>
+            <p class="eyebrow">Tägliches Training</p>
+            <p class="hero-number"><strong id="gt-due">0</strong> Übungen fällig</p>
+          </div>
+          <button id="gt-train" class="btn primary big">Training starten</button>
+        </div>
+        <p class="muted" id="gt-info"></p>
+        <div class="stackbar big" id="gt-bar"><span class="known"></span><span class="learning"></span></div>
+        <p class="muted small" id="gt-known"></p>
+        <p class="muted small">So funktioniert's: Richtig beantwortete Übungen kommen nach 1, 3, 7, 14 und 30 Tagen wieder. Falsche gleich nochmal. Ab dem dritten Mal richtig in Folge gilt eine Übung als <b>sicher</b>.</p>
+      </section>
+      <div id="topic-list"></div>
+    </main>
+  </section>
+
+  <!-- Grammar: topic explanation -->
+  <section id="view-topic" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-grammar>← Grammatik</button>
+      <div class="title" id="topic-title"></div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page narrow-ish">
+      <div class="topic-actions">
+        <button class="btn primary" data-topic-start>Übungen starten</button>
+        <button class="btn" id="topic-due-btn">Nur fällige</button>
+        <span class="muted small" id="topic-progress"></span>
+      </div>
+      <article class="gram" id="topic-article"></article>
+      <section class="panel links-panel">
+        <h2>Mehr dazu im Internet</h2>
+        <ul id="topic-links"></ul>
+      </section>
+      <div class="topic-actions bottom">
+        <button class="btn primary big" data-topic-start>Übungen starten</button>
+      </div>
+    </main>
+  </section>
+
+  <!-- Grammar: exercise -->
+  <section id="view-quiz" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-grammar>← Beenden</button>
+      <div class="progress"><div id="quiz-bar"></div></div>
+      <div class="pill" id="quiz-counter"></div>
+    </header>
+    <main class="page narrow">
+      <div class="quiz-card">
+        <p class="eyebrow" id="quiz-topic"></p>
+        <p class="quiz-question" id="quiz-question"></p>
+        <div class="options" id="quiz-options"></div>
+        <button id="quiz-check" class="btn primary big">Prüfen</button>
+        <div id="quiz-feedback" class="feedback" hidden>
+          <strong id="quiz-verdict"></strong>
+          <p id="quiz-solution"></p>
+          <p id="quiz-explain" class="muted"></p>
+        </div>
+        <button id="quiz-next" class="btn primary big" hidden>Weiter →</button>
+      </div>
+      <p class="muted small quiz-hint">Tipp: Mit dem Apple Pencil kannst du direkt in die Lücke schreiben (Scribble). Enter = prüfen/weiter, 1–3 = Antwort wählen.</p>
+    </main>
+  </section>
+
+  <!-- Grammar: done -->
+  <section id="view-quiz-done" class="view center" hidden>
+    <div class="done-card">
+      <div class="done-check">✓</div>
+      <h1 id="quiz-done-title"></h1>
+      <p class="muted" id="quiz-done-stats"></p>
+      <div class="row">
+        <button id="quiz-again" class="btn">Nochmal</button>
+        <button class="btn" data-grammar>Zur Grammatik</button>
         <button class="btn primary" data-home>Zur Übersicht</button>
       </div>
     </div>
