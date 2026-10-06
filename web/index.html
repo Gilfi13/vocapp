@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Vocapp">
+  <meta name="theme-color" content="#ffffff">
+  <title>Vocapp</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Login -->
+  <section id="view-login" class="view center">
+    <form id="login-form" class="login-card">
+      <div class="logo">Voc<span>app</span></div>
+      <p class="muted">Vokabeln lernen mit Stift</p>
+      <label>Benutzername
+        <input id="login-user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+      </label>
+      <label>Passwort
+        <input id="login-pass" type="password" autocomplete="current-password" required>
+      </label>
+      <p id="login-error" class="error" hidden></p>
+      <button class="btn primary big" type="submit">Anmelden</button>
+    </form>
+  </section>
+
+  <!-- Deck list -->
+  <section id="view-decks" class="view" hidden>
+    <header class="topbar">
+      <div class="logo small">Voc<span>app</span></div>
+      <div class="spacer"></div>
+      <button id="logout-btn" class="btn ghost">Abmelden</button>
+    </header>
+    <main class="page">
+      <div class="page-head">
+        <h1>Meine Stapel</h1>
+        <button id="new-deck-btn" class="btn primary">+ Neuer Stapel</button>
+      </div>
+      <div id="deck-list" class="deck-list"></div>
+      <p id="deck-empty" class="empty" hidden>Noch keine Stapel. Lege deinen ersten Stapel an!</p>
+    </main>
+  </section>
+
+  <!-- Create / edit cards -->
+  <section id="view-edit" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost back-btn" data-back>← Stapel</button>
+      <div class="title" id="edit-title"></div>
+      <div class="pill" id="edit-counter"></div>
+    </header>
+    <main class="board">
+      <div class="side">
+        <div class="side-head">
+          <span class="side-label">Englisch <small>Vorderseite</small></span>
+          <span class="tools">
+            <button class="icon-btn" data-undo="en" title="Rückgängig">↶</button>
+            <button class="icon-btn" data-clear="en" title="Leeren">✕</button>
+          </span>
+        </div>
+        <canvas id="pad-en" class="pad"></canvas>
+      </div>
+      <div class="side">
+        <div class="side-head">
+          <span class="side-label">Deutsch <small>Rückseite</small></span>
+          <span class="tools">
+            <button class="icon-btn" data-undo="de" title="Rückgängig">↶</button>
+            <button class="icon-btn" data-clear="de" title="Leeren">✕</button>
+          </span>
+        </div>
+        <canvas id="pad-de" class="pad"></canvas>
+      </div>
+    </main>
+    <footer class="bottombar">
+      <button id="edit-prev" class="btn">← Vorherige</button>
+      <button id="edit-delete" class="btn danger-ghost">Karte löschen</button>
+      <div class="spacer"></div>
+      <button id="edit-next" class="btn primary big">Weiter →</button>
+    </footer>
+  </section>
+
+  <!-- Learn setup -->
+  <section id="view-setup" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost back-btn" data-back>← Stapel</button>
+      <div class="title" id="setup-title"></div>
+      <div class="spacer"></div>
+    </header>
+    <main class="page narrow">
+      <h1>Lernen</h1>
+      <div id="resume-box" class="resume" hidden>
+        <p>Du hast eine offene Lernrunde: <strong id="resume-info"></strong></p>
+        <button id="resume-btn" class="btn primary">Weitermachen</button>
+      </div>
+      <p class="muted">Welche Seite möchtest du zuerst sehen?</p>
+      <div class="choice-grid">
+        <button class="choice" data-dir="de">
+          <span class="choice-main">Deutsch zuerst</span>
+          <span class="muted">Ich sehe Deutsch und schreibe Englisch</span>
+        </button>
+        <button class="choice" data-dir="en">
+          <span class="choice-main">Englisch zuerst</span>
+          <span class="muted">Ich sehe Englisch und schreibe Deutsch</span>
+        </button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="shuffle" checked> Karten mischen</label>
+    </main>
+  </section>
+
+  <!-- Learn -->
+  <section id="view-learn" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost back-btn" data-back>← Beenden</button>
+      <div class="progress"><div id="progress-bar"></div></div>
+      <div class="pill" id="learn-counter"></div>
+    </header>
+    <main class="board">
+      <div class="side">
+        <div class="side-head"><span class="side-label" id="prompt-label"></span></div>
+        <div class="card-view">
+          <img id="prompt-img" alt="">
+        </div>
+        <div id="solution" class="solution" hidden>
+          <span class="solution-label">Lösung</span>
+          <img id="solution-img" alt="">
+        </div>
+      </div>
+      <div class="side">
+        <div class="side-head">
+          <span class="side-label" id="answer-label"></span>
+          <span class="tools">
+            <button class="icon-btn" data-undo="answer" title="Rückgängig">↶</button>
+            <button class="icon-btn" data-clear="answer" title="Leeren">✕</button>
+          </span>
+        </div>
+        <canvas id="pad-answer" class="pad"></canvas>
+      </div>
+    </main>
+    <footer class="bottombar">
+      <div class="spacer"></div>
+      <button id="reveal-btn" class="btn primary big">Lösung zeigen</button>
+      <div id="judge" class="judge" hidden>
+        <button id="wrong-btn" class="round wrong" title="Falsch">✕</button>
+        <button id="right-btn" class="round right" title="Richtig">✓</button>
+      </div>
+      <div class="spacer"></div>
+    </footer>
+  </section>
+
+  <!-- Done -->
+  <section id="view-done" class="view center" hidden>
+    <div class="done-card">
+      <div class="done-check">✓</div>
+      <h1>Geschafft!</h1>
+      <p class="muted" id="done-stats"></p>
+      <div class="row">
+        <button id="again-btn" class="btn">Nochmal lernen</button>
+        <button class="btn primary" data-back>Zu den Stapeln</button>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
