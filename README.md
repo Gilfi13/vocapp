@@ -25,7 +25,12 @@ Browser (iPad)                    Vercel                 Supabase
   RLS ist aktiv ohne Policies – direkter Zugriff mit dem öffentlichen Key ist gesperrt.
 - **Lernen**: Die Lernrunde (Reihenfolge, offene Karten) liegt im `localStorage`,
   sodass man jederzeit unterbrechen und weitermachen kann. Richtig → Karte fliegt raus,
-  falsch → Karte kommt ans Ende des Stapels.
+  falsch → Karte kommt ans Ende des Stapels. Einzelne Stapel oder alle gemischt.
+- **Fortschritt**: Jede Karte hat eine Leitner-Box (richtig → +1, falsch → 0).
+  Ab Box 2 „sitzt“ ein Wort. Jede Antwort landet in `reviews` (Serie & „heute“).
+- **Handschrift**: [perfect-freehand](https://github.com/steveruizok/perfect-freehand)
+  (MIT, in `web/vendor/`) für glatte, druckempfindliche Striche. Alle Karten nutzen
+  ein festes 3:2-Koordinatensystem (600 × 400) und werden als 900 × 600 PNG gespeichert.
 
 ## API
 
@@ -35,4 +40,7 @@ Browser (iPad)                    Vercel                 Supabase
 | GET/POST | `/decks` | Stapel auflisten / anlegen |
 | PATCH/DELETE | `/decks/:id` | umbenennen / löschen |
 | GET/POST | `/decks/:id/cards` | Karten laden / anlegen |
+| GET | `/cards` | alle Karten aller Stapel |
 | PUT/DELETE | `/cards/:id` | Karte ändern / löschen |
+| POST | `/cards/:id/review` | `{correct}` → neue Box & Zähler |
+| GET | `/stats` | `{today, streak}` |

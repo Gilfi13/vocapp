@@ -68,6 +68,10 @@ async function verifyToken(token: string | null): Promise<boolean> {
   return safeEqual(sig, await hmac(`${prefix}.${exp}`));
 }
 
+const CARD_FIELDS = "id, deck_id, position, english, german, box, correct_count, wrong_count, last_reviewed";
+const KNOWN_BOX = 2; // a card "sitzt" from this Leitner box on
+const MAX_BOX = 5;
+
 function isImage(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("data:image/") && value.length < 2_000_000;
 }
@@ -96,21 +100,48 @@ Deno.serve(async (req) => {
       return json({ error: "Nicht angemeldet" }, 401);
     }
 
-    // GET /decks – all decks with card count
+    // GET /decks – all decks with learning progress
     if (method === "GET" && path === "/decks") {
       const { data, error } = await db
         .from("decks")
-        .select("id, name, created_at, cards(count)")
+        .select("id, name, created_at, cards(box, last_reviewed)")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return json(
-        data.map((d: any) => ({
-          id: d.id,
-          name: d.name,
-          created_at: d.created_at,
-          count: d.cards?.[0]?.count ?? 0,
-        })),
+        data.map((d: any) => {
+          const cards = d.cards ?? [];
+          const known = cards.filter((c: any) => c.box >= KNOWN_BOX).length;
+          const fresh = cards.filter((c: any) => !c.last_reviewed).length;
+          return {
+            id: d.id,
+            name: d.name,
+            created_at: d.created_at,
+            count: cards.length,
+            known,
+            learning: cards.length - known - fresh,
+            fresh,
+          };
+        }),
       );
+    }
+
+    // GET /stats – answers today and learning streak
+    if (method === "GET" && path === "/stats") {
+      const { data, error } = await db.rpc("review_stats", { tz: "Europe/Berlin" });
+      if (error) throw error;
+      return json(data);
+    }
+
+    // GET /cards – every card of every deck
+    if (method === "GET" && path === "/cards") {
+      const { data, error } = await db
+        .from("cards")
+        .select(CARD_FIELDS)
+        .order("deck_id")
+        .order("position")
+        .order("created_at");
+      if (error) throw error;
+      return json(data);
     }
 
     // POST /decks {name}
@@ -146,7 +177,7 @@ Deno.serve(async (req) => {
       if (method === "GET" && seg[2] === "cards") {
         const { data, error } = await db
           .from("cards")
-          .select("id, position, english, german")
+          .select(CARD_FIELDS)
           .eq("deck_id", deckId)
           .order("position")
           .order("created_at");
@@ -165,11 +196,34 @@ Deno.serve(async (req) => {
         const { data, error } = await db
           .from("cards")
           .insert({ deck_id: deckId, english, german, position: count ?? 0 })
-          .select("id, position, english, german")
+          .select(CARD_FIELDS)
           .single();
         if (error) throw error;
         return json(data, 201);
       }
+    }
+
+    // POST /cards/:id/review {correct} – right: one box up, wrong: back to box 0
+    if (method === "POST" && seg[0] === "cards" && seg[1] && seg[2] === "review") {
+      const cardId = seg[1];
+      const { correct } = await req.json();
+      const ok = correct === true;
+      const { data: card, error: readError } = await db
+        .from("cards")
+        .select("box, correct_count, wrong_count")
+        .eq("id", cardId)
+        .single();
+      if (readError) return json({ error: "Karte nicht gefunden" }, 404);
+      const update = {
+        box: ok ? Math.min(card.box + 1, MAX_BOX) : 0,
+        correct_count: card.correct_count + (ok ? 1 : 0),
+        wrong_count: card.wrong_count + (ok ? 0 : 1),
+        last_reviewed: new Date().toISOString(),
+      };
+      const { error } = await db.from("cards").update(update).eq("id", cardId);
+      if (error) throw error;
+      await db.from("reviews").insert({ card_id: cardId, correct: ok });
+      return json(update);
     }
 
     if (seg[0] === "cards" && seg[1] && seg.length === 2) {
