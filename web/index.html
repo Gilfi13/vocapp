@@ -17,7 +17,7 @@
 <body>
 
   <!-- Login -->
-  <section id="view-login" class="view center">
+  <section id="view-login" class="view center" hidden>
     <form id="login-form" class="login-card">
       <div class="logo">Voc<span>app</span></div>
       <p class="muted">Vokabeln lernen mit Stift</p>
@@ -32,14 +32,37 @@
     </form>
   </section>
 
-  <!-- Deck list -->
-  <section id="view-decks" class="view" hidden>
+  <!-- Home: progress + decks -->
+  <section id="view-home" class="view" hidden>
     <header class="topbar">
       <div class="logo small">Voc<span>app</span></div>
       <div class="spacer"></div>
-      <button id="logout-btn" class="btn ghost">Abmelden</button>
+      <button id="user-btn" class="user-btn"><span class="avatar" id="user-initial"></span><span id="user-name"></span><span class="caret">▾</span></button>
     </header>
     <main class="page">
+      <section class="hero">
+        <div class="hero-head">
+          <div>
+            <p class="eyebrow">Dein Fortschritt</p>
+            <p class="hero-number"><strong id="hero-known">0</strong> von <span id="hero-total">0</span> Wörtern sitzen</p>
+          </div>
+          <div class="hero-stats">
+            <div class="stat"><span class="stat-value" id="stat-streak">0</span><span class="stat-label">Tage in Folge</span></div>
+            <div class="stat"><span class="stat-value" id="stat-today">0</span><span class="stat-label">Antworten heute</span></div>
+          </div>
+        </div>
+        <div class="stackbar big" id="hero-bar"><span class="known"></span><span class="learning"></span></div>
+        <div class="legend">
+          <span><i class="dot known"></i>Sitzt <b id="leg-known">0</b></span>
+          <span><i class="dot learning"></i>Am Lernen <b id="leg-learning">0</b></span>
+          <span><i class="dot fresh"></i>Neu <b id="leg-fresh">0</b></span>
+        </div>
+        <div class="hero-actions">
+          <button id="learn-all-btn" class="btn primary">Alle Stapel gemischt lernen</button>
+          <button id="words-btn" class="btn">Alle Wörter ansehen</button>
+        </div>
+      </section>
+
       <div class="page-head">
         <h1>Meine Stapel</h1>
         <button id="new-deck-btn" class="btn primary">+ Neuer Stapel</button>
@@ -49,57 +72,101 @@
     </main>
   </section>
 
-  <!-- Create / edit cards -->
-  <section id="view-edit" class="view" hidden>
+  <!-- User management (admin) -->
+  <section id="view-users" class="view" hidden>
     <header class="topbar">
-      <button class="btn ghost back-btn" data-back>← Stapel</button>
+      <button class="btn ghost" data-home>← Übersicht</button>
+      <div class="title">Benutzer</div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page narrow">
+      <form id="new-user-form" class="panel">
+        <h2>Neuen Benutzer anlegen</h2>
+        <p class="muted small">Jeder Benutzer sieht nur seine eigenen Stapel, Karten und seinen Fortschritt.</p>
+        <div class="form-row">
+          <label>Benutzername
+            <input id="new-user-name" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+          </label>
+          <label>Passwort
+            <input id="new-user-pass" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+          </label>
+        </div>
+        <p id="new-user-error" class="error" hidden></p>
+        <button class="btn primary" type="submit">Benutzer anlegen</button>
+      </form>
+      <div id="user-list" class="user-list"></div>
+    </main>
+  </section>
+
+  <!-- All words -->
+  <section id="view-words" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-home>← Übersicht</button>
+      <div class="title">Alle Wörter</div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page wide">
+      <div class="chips" id="word-filters">
+        <button class="chip active" data-filter="all">Alle <b></b></button>
+        <button class="chip" data-filter="known">Sitzt <b></b></button>
+        <button class="chip" data-filter="learning">Am Lernen <b></b></button>
+        <button class="chip" data-filter="fresh">Neu <b></b></button>
+      </div>
+      <div id="word-list"></div>
+      <p id="word-empty" class="empty" hidden>Hier gibt es noch keine Wörter.</p>
+    </main>
+  </section>
+
+  <!-- Create / edit cards -->
+  <section id="view-edit" class="view fit" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-home>← Fertig</button>
       <div class="title" id="edit-title"></div>
       <div class="pill" id="edit-counter"></div>
     </header>
-    <main class="board">
-      <div class="side">
-        <div class="side-head">
-          <span class="side-label">Englisch <small>Vorderseite</small></span>
-          <span class="tools">
-            <button class="icon-btn" data-undo="en" title="Rückgängig">↶</button>
-            <button class="icon-btn" data-clear="en" title="Leeren">✕</button>
-          </span>
-        </div>
-        <canvas id="pad-en" class="pad"></canvas>
-      </div>
-      <div class="side">
-        <div class="side-head">
-          <span class="side-label">Deutsch <small>Rückseite</small></span>
-          <span class="tools">
-            <button class="icon-btn" data-undo="de" title="Rückgängig">↶</button>
-            <button class="icon-btn" data-clear="de" title="Leeren">✕</button>
-          </span>
-        </div>
-        <canvas id="pad-de" class="pad"></canvas>
-      </div>
-    </main>
-    <footer class="bottombar">
+    <div class="actionbar">
       <button id="edit-prev" class="btn">← Vorherige</button>
       <button id="edit-delete" class="btn danger-ghost">Karte löschen</button>
       <div class="spacer"></div>
-      <button id="edit-next" class="btn primary big">Weiter →</button>
-    </footer>
+      <button id="edit-next" class="btn primary big">Speichern & weiter →</button>
+    </div>
+    <main class="stage">
+      <div class="pair">
+        <div class="card-col">
+          <div class="card-label">Englisch <small>Vorderseite</small></div>
+          <div class="flashcard"><canvas id="pad-en" class="pad"></canvas></div>
+          <div class="card-tools">
+            <button class="tool" data-undo="en">↶ Rückgängig</button>
+            <button class="tool" data-clear="en">✕ Leeren</button>
+          </div>
+        </div>
+        <div class="card-col">
+          <div class="card-label">Deutsch <small>Rückseite</small></div>
+          <div class="flashcard"><canvas id="pad-de" class="pad"></canvas></div>
+          <div class="card-tools">
+            <button class="tool" data-undo="de">↶ Rückgängig</button>
+            <button class="tool" data-clear="de">✕ Leeren</button>
+          </div>
+        </div>
+      </div>
+    </main>
   </section>
 
   <!-- Learn setup -->
   <section id="view-setup" class="view" hidden>
     <header class="topbar">
-      <button class="btn ghost back-btn" data-back>← Stapel</button>
+      <button class="btn ghost" data-home>← Übersicht</button>
       <div class="title" id="setup-title"></div>
-      <div class="spacer"></div>
+      <div class="spacer-btn"></div>
     </header>
     <main class="page narrow">
       <h1>Lernen</h1>
+      <p class="muted" id="setup-info"></p>
       <div id="resume-box" class="resume" hidden>
-        <p>Du hast eine offene Lernrunde: <strong id="resume-info"></strong></p>
+        <p>Offene Lernrunde: <strong id="resume-info"></strong></p>
         <button id="resume-btn" class="btn primary">Weitermachen</button>
       </div>
-      <p class="muted">Welche Seite möchtest du zuerst sehen?</p>
+      <p class="section-label">Welche Seite möchtest du zuerst sehen?</p>
       <div class="choice-grid">
         <button class="choice" data-dir="de">
           <span class="choice-main">Deutsch zuerst</span>
@@ -111,47 +178,46 @@
         </button>
       </div>
       <label class="toggle"><input type="checkbox" id="shuffle" checked> Karten mischen</label>
+      <label class="toggle"><input type="checkbox" id="only-unsure"> <span id="only-unsure-label">Nur Wörter, die noch nicht sitzen</span></label>
     </main>
   </section>
 
   <!-- Learn -->
-  <section id="view-learn" class="view" hidden>
+  <section id="view-learn" class="view fit" hidden>
     <header class="topbar">
-      <button class="btn ghost back-btn" data-back>← Beenden</button>
+      <button class="btn ghost" data-home>← Beenden</button>
       <div class="progress"><div id="progress-bar"></div></div>
       <div class="pill" id="learn-counter"></div>
     </header>
-    <main class="board">
-      <div class="side">
-        <div class="side-head"><span class="side-label" id="prompt-label"></span></div>
-        <div class="card-view">
-          <img id="prompt-img" alt="">
-        </div>
-        <div id="solution" class="solution" hidden>
-          <span class="solution-label">Lösung</span>
-          <img id="solution-img" alt="">
-        </div>
-      </div>
-      <div class="side">
-        <div class="side-head">
-          <span class="side-label" id="answer-label"></span>
-          <span class="tools">
-            <button class="icon-btn" data-undo="answer" title="Rückgängig">↶</button>
-            <button class="icon-btn" data-clear="answer" title="Leeren">✕</button>
-          </span>
-        </div>
-        <canvas id="pad-answer" class="pad"></canvas>
-      </div>
-    </main>
-    <footer class="bottombar">
-      <div class="spacer"></div>
+    <div class="actionbar center">
       <button id="reveal-btn" class="btn primary big">Lösung zeigen</button>
       <div id="judge" class="judge" hidden>
-        <button id="wrong-btn" class="round wrong" title="Falsch">✕</button>
-        <button id="right-btn" class="round right" title="Richtig">✓</button>
+        <button id="wrong-btn" class="judge-btn wrong">✕ Nochmal</button>
+        <button id="right-btn" class="judge-btn right">✓ Gewusst</button>
       </div>
-      <div class="spacer"></div>
-    </footer>
+    </div>
+    <main class="stage">
+      <div class="pair">
+        <div class="card-col">
+          <div class="card-label" id="prompt-label"></div>
+          <div class="flip" id="flip">
+            <div class="flip-inner">
+              <div class="flashcard face front"><img id="prompt-img" alt=""></div>
+              <div class="flashcard face back"><img id="solution-img" alt=""></div>
+            </div>
+          </div>
+          <div class="card-tools"><span class="muted small" id="card-origin"></span></div>
+        </div>
+        <div class="card-col">
+          <div class="card-label" id="answer-label"></div>
+          <div class="flashcard"><canvas id="pad-answer" class="pad"></canvas></div>
+          <div class="card-tools">
+            <button class="tool" data-undo="answer">↶ Rückgängig</button>
+            <button class="tool" data-clear="answer">✕ Leeren</button>
+          </div>
+        </div>
+      </div>
+    </main>
   </section>
 
   <!-- Done -->
@@ -160,15 +226,43 @@
       <div class="done-check">✓</div>
       <h1>Geschafft!</h1>
       <p class="muted" id="done-stats"></p>
+      <div class="stackbar big" id="done-bar"><span class="known"></span><span class="learning"></span></div>
+      <p class="muted small" id="done-progress"></p>
       <div class="row">
         <button id="again-btn" class="btn">Nochmal lernen</button>
-        <button class="btn primary" data-back>Zu den Stapeln</button>
+        <button class="btn primary" data-home>Zur Übersicht</button>
       </div>
     </div>
   </section>
 
+  <!-- Deck options menu -->
+  <div id="menu" class="menu" hidden>
+    <button data-menu="rename">Umbenennen</button>
+    <button data-menu="delete" class="danger">Löschen</button>
+  </div>
+
+  <!-- User menu -->
+  <div id="user-menu" class="menu" hidden>
+    <button data-user="users">Benutzer verwalten</button>
+    <button data-user="password">Passwort ändern</button>
+    <button data-user="logout" class="danger">Abmelden</button>
+  </div>
+
+  <!-- Small form dialog (passwords) -->
+  <dialog id="form-dialog" class="dialog">
+    <form method="dialog">
+      <h2 id="form-title"></h2>
+      <div id="form-fields"></div>
+      <p id="form-error" class="error" hidden></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn ghost" id="form-cancel">Abbrechen</button>
+        <button type="submit" class="btn primary" id="form-submit">OK</button>
+      </div>
+    </form>
+  </dialog>
+
   <div id="toast" class="toast" hidden></div>
 
-  <script src="app.js"></script>
+  <script type="module" src="app.js"></script>
 </body>
 </html>
