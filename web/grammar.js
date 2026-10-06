@@ -76,10 +76,11 @@ export function initGrammar({ api, show, toast, setBar, plural, shuffle, isVisib
     }
     const c = counts(ITEMS.keys());
     $("#gc-due").textContent = c.due;
-    $("#gc-due-label").textContent = c.due === 1 ? "Übung fällig" : "Übungen fällig";
-    $("#gc-known").textContent = `${c.known} von ${ITEMS.size} Übungen sicher`;
+    $("#gc-due-label").textContent = c.due === 1 ? "Übung heute fällig" : "Übungen heute fällig";
+    $("#gc-known").textContent = c.known;
+    $("#gc-total").textContent = ITEMS.size;
     setBar($("#gc-bar"), c.known, c.learning, ITEMS.size);
-    $("#gc-train").textContent = c.due ? `Grammatik trainieren (${c.due} fällig)` : "Grammatik trainieren";
+    $("#gc-train").textContent = c.due ? `Trainieren (${c.due})` : "Trainieren";
   }
 
   /* ---------- topic list ---------- */

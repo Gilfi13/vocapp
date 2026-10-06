@@ -342,6 +342,7 @@ function logout() {
 async function start() {
   me = await api("/me");
   $("#user-name").textContent = me.username;
+  $("#hello").textContent = `Hallo, ${me.username[0].toUpperCase()}${me.username.slice(1)}!`;
   $("#user-initial").textContent = me.username[0];
   $('[data-user="users"]').hidden = !me.is_admin;
   await showHome();
@@ -525,8 +526,12 @@ function renderHero(stats) {
   $("#leg-learning").textContent = learning;
   $("#leg-fresh").textContent = total - known - learning;
   setBar($("#hero-bar"), known, learning, total);
-  $("#stat-streak").textContent = stats?.streak ?? 0;
-  $("#stat-today").textContent = stats?.today ?? 0;
+  const streak = stats?.streak ?? 0;
+  const today = stats?.today ?? 0;
+  $("#stat-streak").textContent = streak;
+  $("#stat-streak-label").textContent = streak === 1 ? "Tag in Folge" : "Tage in Folge";
+  $("#stat-today").textContent = today;
+  $("#stat-today-label").textContent = today === 1 ? "Antwort heute" : "Antworten heute";
   $("#learn-all-btn").disabled = total === 0;
 }
 
@@ -545,8 +550,8 @@ function renderDecks() {
       <div class="deck-meta"><span class="count"></span><span class="known"></span></div>
       <div class="stackbar"><span class="known"></span><span class="learning"></span></div>
       <div class="deck-actions">
-        <button class="btn" data-act="edit">Karten</button>
-        <button class="btn primary" data-act="learn">Lernen</button>
+        <button class="btn small" data-act="edit">Karten</button>
+        <button class="btn primary small" data-act="learn">Lernen</button>
       </div>`;
     el.querySelector(".deck-name").textContent = deck.name;
     el.querySelector(".deck-meta .count").textContent = plural(deck.count, "Karte", "Karten");
@@ -720,11 +725,11 @@ function setEditIndex(i) {
   if (card) {
     pads.en.load(card.english);
     pads.de.load(card.german);
-    $("#edit-counter").textContent = `Karte ${i + 1} / ${edit.cards.length}`;
+    $("#edit-counter").textContent = `${i + 1} / ${edit.cards.length}`;
   } else {
     pads.en.reset();
     pads.de.reset();
-    $("#edit-counter").textContent = `Neue Karte · ${edit.cards.length} gespeichert`;
+    $("#edit-counter").textContent = `Neu · ${edit.cards.length + 1}`;
   }
   $("#edit-delete").hidden = !card;
   $("#edit-prev").disabled = i === 0;
