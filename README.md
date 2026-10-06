@@ -18,9 +18,13 @@ Browser (iPad)                    Vercel                 Supabase
 
 - **Frontend** (`web/`): Vanilla HTML/CSS/JS, keine Build-Schritte. Handschrift wird
   auf `<canvas>` gezeichnet (Pencil-Druck, Handballen-Erkennung) und als transparentes PNG gespeichert.
-- **Backend** (`supabase/functions/api`): eine Edge Function. Prüft Login
-  (nur gehashte Zugangsdaten im Code), stellt ein HMAC-signiertes Token (30 Tage) aus
-  und liest/schreibt die Tabellen mit dem Service-Role-Key.
+- **Backend** (`supabase/functions/api`): eine Edge Function. Prüft den Login gegen
+  die Tabelle `users` (Passwörter als PBKDF2-SHA256 mit Salt), stellt ein HMAC-signiertes
+  Token mit der Benutzer-ID aus (30 Tage) und liest/schreibt die Tabellen mit dem
+  Service-Role-Key – jede Abfrage ist auf den angemeldeten Benutzer beschränkt.
+- **Mehrere Benutzer**: Jeder Stapel, jede Karte und jede Antwort hat eine `user_id`.
+  Admins (`users.is_admin`) legen unter „Benutzer verwalten“ neue Konten an, setzen
+  Passwörter neu oder löschen Konten. Eine offene Registrierung gibt es nicht.
 - **Datenbank** (`supabase/migrations`): `decks` und `cards` (Englisch-/Deutsch-Bild als Data-URL).
   RLS ist aktiv ohne Policies – direkter Zugriff mit dem öffentlichen Key ist gesperrt.
 - **Lernen**: Die Lernrunde (Reihenfolge, offene Karten) liegt im `localStorage`,
@@ -37,6 +41,10 @@ Browser (iPad)                    Vercel                 Supabase
 | Methode | Pfad | |
 |---|---|---|
 | POST | `/login` | `{username, password}` → `{token}` |
+| GET | `/me` | angemeldeter Benutzer |
+| POST | `/me/password` | `{current, password}` eigenes Passwort ändern |
+| GET/POST | `/users` | (Admin) Benutzer auflisten / anlegen |
+| PATCH/DELETE | `/users/:id` | (Admin) Passwort neu setzen / Benutzer löschen |
 | GET/POST | `/decks` | Stapel auflisten / anlegen |
 | PATCH/DELETE | `/decks/:id` | umbenennen / löschen |
 | GET/POST | `/decks/:id/cards` | Karten laden / anlegen |

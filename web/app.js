@@ -3,10 +3,13 @@ import { getStroke } from "./vendor/perfect-freehand.mjs";
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
 const TOKEN_KEY = "vocapp.token";
-const SESSION_KEY = (deckId) => `vocapp.session.${deckId}`;
+// open learning rounds are stored per user on this device
+const SESSION_KEY = (deckId) => `vocapp.session.${me?.id}.${deckId}`;
 const LANG = { en: "Englisch", de: "Deutsch" };
 const ALL_DECKS = { id: "all", name: "Alle Stapel" };
 const KNOWN_BOX = 2; // same rule as the backend: from box 2 on a word "sitzt"
+
+let me = null; // logged-in user {id, username, is_admin}
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -308,7 +311,7 @@ $("#login-form").addEventListener("submit", async (e) => {
     });
     storage(TOKEN_KEY, token);
     $("#login-pass").value = "";
-    showHome();
+    await start();
   } catch (ex) {
     err.textContent = ex.message === "Login fehlgeschlagen" ? "Benutzername oder Passwort falsch." : ex.message;
     err.hidden = false;
@@ -319,10 +322,167 @@ $("#login-form").addEventListener("submit", async (e) => {
 
 function logout() {
   storage(TOKEN_KEY, null);
+  me = null;
   show("view-login");
 }
 
-$("#logout-btn").addEventListener("click", logout);
+// Load the logged-in user, then open the overview.
+async function start() {
+  me = await api("/me");
+  $("#user-name").textContent = me.username;
+  $("#user-initial").textContent = me.username[0];
+  $('[data-user="users"]').hidden = !me.is_admin;
+  await showHome();
+}
+
+/* ---------- user menu ---------- */
+
+$("#user-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  openMenu($("#user-menu"), e.currentTarget);
+});
+
+$("#user-menu").addEventListener("click", (e) => {
+  const action = e.target.closest("[data-user]")?.dataset.user;
+  closeMenu();
+  if (action === "logout") logout();
+  if (action === "users") showUsers();
+  if (action === "password") {
+    openForm({
+      title: "Passwort ändern",
+      submitLabel: "Speichern",
+      fields: [
+        { name: "current", label: "Aktuelles Passwort", type: "password", autocomplete: "current-password" },
+        { name: "password", label: "Neues Passwort", type: "password", autocomplete: "new-password" },
+        { name: "repeat", label: "Neues Passwort wiederholen", type: "password", autocomplete: "new-password" },
+      ],
+      async onSubmit({ current, password, repeat }) {
+        if (password !== repeat) throw new Error("Die neuen Passwörter stimmen nicht überein.");
+        await api("/me/password", { method: "POST", body: { current, password } });
+        toast("Passwort geändert");
+      },
+    });
+  }
+});
+
+/* ---------- form dialog ---------- */
+
+let formSubmit = null;
+
+function openForm({ title, fields, submitLabel = "OK", onSubmit }) {
+  const dialog = $("#form-dialog");
+  $("#form-title").textContent = title;
+  $("#form-submit").textContent = submitLabel;
+  $("#form-error").hidden = true;
+  const box = $("#form-fields");
+  box.innerHTML = "";
+  for (const f of fields) {
+    const label = document.createElement("label");
+    label.textContent = f.label;
+    const input = document.createElement("input");
+    Object.assign(input, { name: f.name, type: f.type ?? "text", required: true, value: f.value ?? "" });
+    input.setAttribute("autocomplete", f.autocomplete ?? "off");
+    input.setAttribute("autocapitalize", "off");
+    label.appendChild(input);
+    box.appendChild(label);
+  }
+  formSubmit = onSubmit;
+  dialog.showModal();
+  box.querySelector("input")?.focus();
+}
+
+$("#form-dialog form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const values = Object.fromEntries(new FormData(e.target));
+  const btn = $("#form-submit");
+  btn.disabled = true;
+  try {
+    await formSubmit(values);
+    $("#form-dialog").close();
+  } catch (ex) {
+    $("#form-error").textContent = ex.message;
+    $("#form-error").hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("#form-cancel").addEventListener("click", () => $("#form-dialog").close());
+
+/* ------------------------------------------------------------------ */
+/* User management (admin)                                             */
+/* ------------------------------------------------------------------ */
+
+async function showUsers() {
+  show("view-users");
+  try {
+    renderUsers(await api("/users"));
+  } catch (ex) {
+    toast(ex.message);
+  }
+}
+
+function renderUsers(users) {
+  const list = $("#user-list");
+  list.innerHTML = "";
+  for (const user of users) {
+    const isMe = user.id === me.id;
+    const el = document.createElement("div");
+    el.className = "user-row";
+    el.innerHTML = `
+      <span class="avatar"></span>
+      <div class="user-info">
+        <strong></strong>${user.is_admin ? '<span class="badge known">Admin</span>' : ""}${isMe ? '<span class="badge learning">Du</span>' : ""}
+        <div class="muted small">${plural(user.decks, "Stapel", "Stapel")} · ${plural(user.cards, "Karte", "Karten")}</div>
+      </div>
+      <div class="user-actions">
+        <button class="btn" data-act="password">Passwort setzen</button>
+        ${isMe ? "" : '<button class="btn danger-ghost" data-act="delete">Löschen</button>'}
+      </div>`;
+    el.querySelector(".avatar").textContent = user.username[0];
+    el.querySelector("strong").textContent = user.username;
+    el.querySelector('[data-act="password"]').onclick = () =>
+      openForm({
+        title: `Neues Passwort für „${user.username}“`,
+        submitLabel: "Speichern",
+        fields: [{ name: "password", label: "Neues Passwort", autocomplete: "off" }],
+        async onSubmit({ password }) {
+          await api(`/users/${user.id}`, { method: "PATCH", body: { password } });
+          toast("Passwort gespeichert");
+        },
+      });
+    const del = el.querySelector('[data-act="delete"]');
+    if (del) {
+      del.onclick = async () => {
+        if (!confirm(`„${user.username}“ mit allen Stapeln und Karten (${user.cards}) endgültig löschen?`)) return;
+        try {
+          await api(`/users/${user.id}`, { method: "DELETE" });
+          showUsers();
+        } catch (ex) {
+          toast(ex.message);
+        }
+      };
+    }
+    list.appendChild(el);
+  }
+}
+
+$("#new-user-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = $("#new-user-error");
+  err.hidden = true;
+  const username = $("#new-user-name").value.trim().toLowerCase();
+  try {
+    await api("/users", { method: "POST", body: { username, password: $("#new-user-pass").value } });
+    $("#new-user-name").value = "";
+    $("#new-user-pass").value = "";
+    toast(`„${username}“ kann sich jetzt anmelden`);
+    showUsers();
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.hidden = false;
+  }
+});
 
 /* ------------------------------------------------------------------ */
 /* Home: overall progress + decks                                      */
@@ -385,7 +545,8 @@ function renderDecks() {
     el.querySelector('[data-act="edit"]').onclick = () => openEditor(deck);
     el.querySelector(".menu-btn").onclick = (e) => {
       e.stopPropagation();
-      openMenu(e.currentTarget, deck);
+      menuDeck = deck;
+      openMenu($("#menu"), e.currentTarget);
     };
     list.appendChild(el);
   }
@@ -409,9 +570,9 @@ $("#words-btn").addEventListener("click", () => showWords());
 
 let menuDeck = null;
 
-function openMenu(button, deck) {
-  const menu = $("#menu");
-  menuDeck = deck;
+// Show a dropdown menu right-aligned below its button.
+function openMenu(menu, button) {
+  closeMenu();
   menu.hidden = false;
   const r = button.getBoundingClientRect();
   menu.style.top = `${r.bottom + 6}px`;
@@ -419,12 +580,11 @@ function openMenu(button, deck) {
 }
 
 function closeMenu() {
-  $("#menu").hidden = true;
-  menuDeck = null;
+  $$(".menu").forEach((m) => (m.hidden = true));
 }
 
 document.addEventListener("click", (e) => {
-  if (!$("#menu").hidden && !e.target.closest("#menu")) closeMenu();
+  if (!e.target.closest(".menu")) closeMenu();
 });
 
 $("#menu").addEventListener("click", async (e) => {
@@ -818,5 +978,5 @@ $$("[data-home]").forEach((b) =>
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 
-if (storage(TOKEN_KEY)) showHome();
+if (storage(TOKEN_KEY)) start().catch(() => show("view-login"));
 else show("view-login");

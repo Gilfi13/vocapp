@@ -429,6 +429,89 @@ button { font: inherit; cursor: pointer; color: inherit; }
   text-align: center;
 }
 
+/* ---------- Users ---------- */
+.user-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--blue-line);
+  background: var(--white);
+  border-radius: 999px;
+  padding: 4px 12px 4px 4px;
+  font-weight: 600;
+  font-size: 15px;
+}
+.user-btn:active { background: var(--blue-soft); }
+.avatar {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: var(--white);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.caret { color: var(--muted); font-size: 12px; }
+
+.panel {
+  background: var(--white);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.panel h2 { margin: 0; font-size: 20px; }
+.form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.panel label, .dialog label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.panel input, .dialog input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 17px;
+  color: var(--text);
+  padding: 11px 13px;
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
+  outline: none;
+  background: var(--white);
+}
+.panel input:focus, .dialog input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.panel .btn { align-self: flex-start; }
+
+.user-list { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+.user-row {
+  background: var(--white);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.user-row .avatar { width: 38px; height: 38px; font-size: 17px; }
+.user-info { flex: 1; min-width: 140px; }
+.user-info strong { font-size: 17px; }
+.user-info .badge { margin-left: 8px; }
+.user-actions { display: flex; gap: 6px; }
+.user-actions .btn { padding: 7px 12px; font-size: 14px; }
+
+.dialog {
+  border: none;
+  border-radius: 20px;
+  padding: 24px;
+  width: min(420px, calc(100vw - 32px));
+  box-shadow: 0 20px 60px rgba(15, 27, 45, .25);
+  color: var(--text);
+}
+.dialog::backdrop { background: rgba(15, 27, 45, .35); }
+.dialog form { display: flex; flex-direction: column; gap: 14px; }
+.dialog h2 { margin: 0; font-size: 20px; }
+#form-fields { display: flex; flex-direction: column; gap: 12px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ---------- Small screens: stack the cards ---------- */
 @media (max-width: 700px) {
   .pair { flex-direction: column; gap: 14px; --card-w: min(calc(100vw - 40px), calc((100dvh - 330px) / 2 * 1.5)); }
@@ -437,4 +520,6 @@ button { font: inherit; cursor: pointer; color: inherit; }
   .spacer-btn { width: 0; }
   .judge-btn { min-width: 0; padding: 12px 18px; }
   .hero-number strong { font-size: 32px; }
+  .form-row { grid-template-columns: 1fr; }
+  #user-name { display: none; }
 }
