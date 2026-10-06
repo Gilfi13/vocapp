@@ -7,7 +7,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const PBKDF2_ITERATIONS = 210_000;
 const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
-const MIN_PASSWORD = 6;
+const MIN_PASSWORD = 3;
 
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const db = createClient(Deno.env.get("SUPABASE_URL")!, SERVICE_KEY, {
@@ -96,7 +96,6 @@ async function verifyToken(token: string | null): Promise<string | null> {
 
 const CARD_FIELDS = "id, deck_id, position, english, german, box, correct_count, wrong_count, last_reviewed";
 const KNOWN_BOX = 2; // a card "sitzt" from this Leitner box on
-const MAX_BOX = 5;
 
 function isImage(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("data:image/") && value.length < 2_000_000;
@@ -342,26 +341,15 @@ Deno.serve(async (req) => {
 
     // POST /cards/:id/review {correct} – right: one box up, wrong: back to box 0
     if (method === "POST" && seg[0] === "cards" && seg[1] && seg[2] === "review") {
-      const cardId = seg[1];
       const { correct } = await req.json();
-      const ok = correct === true;
-      const { data: card } = await db
-        .from("cards")
-        .select("box, correct_count, wrong_count")
-        .eq("id", cardId)
-        .eq("user_id", uid)
-        .maybeSingle();
-      if (!card) return json({ error: "Karte nicht gefunden" }, 404);
-      const update = {
-        box: ok ? Math.min(card.box + 1, MAX_BOX) : 0,
-        correct_count: card.correct_count + (ok ? 1 : 0),
-        wrong_count: card.wrong_count + (ok ? 0 : 1),
-        last_reviewed: new Date().toISOString(),
-      };
-      const { error } = await db.from("cards").update(update).eq("id", cardId);
+      const { data, error } = await db.rpc("record_review", {
+        p_card: seg[1],
+        p_user: uid,
+        p_correct: correct === true,
+      });
       if (error) throw error;
-      await db.from("reviews").insert({ card_id: cardId, user_id: uid, correct: ok });
-      return json(update);
+      if (!data) return json({ error: "Karte nicht gefunden" }, 404);
+      return json(data);
     }
 
     if (seg[0] === "cards" && seg[1] && seg.length === 2) {

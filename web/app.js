@@ -1,4 +1,4 @@
-import { getStroke } from "./vendor/perfect-freehand.mjs";
+import { getStroke } from "./vendor/perfect-freehand.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
@@ -54,20 +54,25 @@ function storage(key, value) {
 }
 
 async function api(path, { method = "GET", body } = {}) {
-  const res = await fetch(API + path, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      "x-app-token": storage(TOKEN_KEY) || "",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(API + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "x-app-token": storage(TOKEN_KEY) || "",
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new Error("Keine Verbindung – bitte Internet prüfen");
+  }
   if (res.status === 401 && path !== "/login") {
     logout();
     throw new Error("Bitte erneut anmelden");
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || "Fehler beim Speichern");
+  if (!res.ok) throw new Error(data.error || "Da ist etwas schiefgelaufen");
   return data;
 }
 
@@ -144,6 +149,7 @@ class Pad {
     this.bg = null; // existing handwriting when editing a card
     this.dirty = false;
     this.frame = 0;
+    this.ready = Promise.resolve(); // resolves once a loaded card image is drawn
 
     new ResizeObserver(() => this.resize()).observe(canvas);
     canvas.addEventListener("pointerdown", (e) => this.down(e));
@@ -264,11 +270,16 @@ class Pad {
     const placeholder = { pending: true };
     this.bg = placeholder;
     const img = new Image();
-    img.onload = () => {
-      if (this.bg !== placeholder) return; // card changed meanwhile
-      this.bg = img;
-      this.rebuild();
-    };
+    this.ready = new Promise((resolve) => {
+      img.onload = () => {
+        if (this.bg === placeholder) {
+          this.bg = img; // only if the card was not changed meanwhile
+          this.rebuild();
+        }
+        resolve();
+      };
+      img.onerror = resolve;
+    });
     img.src = dataUrl;
   }
 
@@ -656,13 +667,16 @@ function renderWords() {
       el.className = "word";
       el.innerHTML = `
         <div class="word-cards">
-          <div class="flashcard"><img alt="Englisch" src="${card.english}"></div>
-          <div class="flashcard"><img alt="Deutsch" src="${card.german}"></div>
+          <div class="flashcard"><img alt="Englisch"></div>
+          <div class="flashcard"><img alt="Deutsch"></div>
         </div>
         <div class="word-foot">
           <span class="badge ${status}">${labels[status]}</span>
           <span>${card.last_reviewed ? `✓ ${card.correct_count} · ✕ ${card.wrong_count}` : "noch nicht gelernt"}</span>
         </div>`;
+      const [en, de] = el.querySelectorAll("img");
+      en.src = card.english;
+      de.src = card.german;
       el.onclick = () => openEditor(deck, card.id);
       grid.appendChild(el);
     }
@@ -689,13 +703,13 @@ async function openEditor(deck, cardId) {
   $("#edit-title").textContent = deck.name;
   show("view-edit");
   setEditIndex(0);
-  try {
+  $("#view-edit .stage").classList.add("loading");
+  await withBusy(async () => {
     edit.cards = await api(`/decks/${deck.id}/cards`);
     const i = edit.cards.findIndex((c) => c.id === cardId);
     setEditIndex(i >= 0 ? i : edit.cards.length); // default: a fresh blank card
-  } catch (ex) {
-    toast(ex.message);
-  }
+  });
+  $("#view-edit .stage").classList.remove("loading");
 }
 
 function setEditIndex(i) {
@@ -724,6 +738,7 @@ async function saveCurrentCard() {
   if (card && !changed) return "unchanged";
   if (pads.en.isEmpty() || pads.de.isEmpty()) return "incomplete";
 
+  await Promise.all([pads.en.ready, pads.de.ready]);
   const body = { english: pads.en.toDataURL(), german: pads.de.toDataURL() };
   if (card) {
     await api(`/cards/${card.id}`, { method: "PUT", body });
@@ -788,7 +803,7 @@ $("#edit-delete").addEventListener("click", () =>
 /* Learning                                                            */
 /* ------------------------------------------------------------------ */
 
-const learn = { deck: null, cards: new Map(), session: null, revealed: false, pending: [] };
+const learn = { deck: null, cards: new Map(), loaded: false, session: null, revealed: false, pending: [] };
 
 async function loadLearnCards() {
   const path = learn.deck.id === ALL_DECKS.id ? "/cards" : `/decks/${learn.deck.id}/cards`;
@@ -799,6 +814,8 @@ async function loadLearnCards() {
 
 async function openSetup(deck) {
   learn.deck = deck;
+  learn.cards = new Map();
+  learn.loaded = false;
   $("#setup-title").textContent = deck.name;
   $("#setup-info").textContent = "Lade Karten …";
   const open = storage(SESSION_KEY(deck.id));
@@ -809,6 +826,8 @@ async function openSetup(deck) {
   show("view-setup");
   try {
     const cards = await loadLearnCards();
+    if (learn.deck !== deck) return; // another deck was opened meanwhile
+    learn.loaded = true;
     const { known } = countStatus(cards);
     const unsure = cards.length - known;
     $("#setup-info").textContent = `${plural(cards.length, "Karte", "Karten")} · ${known} ${known === 1 ? "sitzt" : "sitzen"} schon`;
@@ -823,6 +842,7 @@ async function openSetup(deck) {
 
 $$(".choice").forEach((btn) =>
   btn.addEventListener("click", () => {
+    if (!learn.loaded) return toast("Karten werden noch geladen …");
     let cards = [...learn.cards.values()];
     if ($("#only-unsure").checked) cards = cards.filter((c) => cardStatus(c) !== "known");
     if (!cards.length) return toast("Keine Karten zum Lernen.");
@@ -841,7 +861,8 @@ $$(".choice").forEach((btn) =>
 );
 
 $("#resume-btn").addEventListener("click", () => {
-  learn.session = storage(SESSION_KEY(learn.deck.id));
+  if (!learn.loaded) return toast("Karten werden noch geladen …");
+  learn.session = { wrong: 0, nowKnown: 0, ...storage(SESSION_KEY(learn.deck.id)) };
   startLearning();
 });
 

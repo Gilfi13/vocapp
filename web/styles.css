@@ -300,6 +300,8 @@ button { font: inherit; cursor: pointer; color: inherit; }
 }
 .tool:active { background: var(--blue-soft); }
 
+.stage.loading { opacity: .4; pointer-events: none; }
+
 /* flip card while learning */
 .flip { perspective: 1400px; width: 100%; aspect-ratio: 3 / 2; }
 .flip-inner {
