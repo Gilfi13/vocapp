@@ -39,48 +39,52 @@
       <div class="spacer"></div>
       <button id="user-btn" class="user-btn"><span class="avatar" id="user-initial"></span><span id="user-name"></span><span class="caret">▾</span></button>
     </header>
-    <main class="page">
-      <section class="hero">
-        <div class="hero-head">
-          <div>
-            <p class="eyebrow">Dein Fortschritt</p>
-            <p class="hero-number"><strong id="hero-known">0</strong> von <span id="hero-total">0</span> Wörtern sitzen</p>
-          </div>
-          <div class="hero-stats">
-            <div class="stat"><span class="stat-value" id="stat-streak">0</span><span class="stat-label">Tage in Folge</span></div>
-            <div class="stat"><span class="stat-value" id="stat-today">0</span><span class="stat-label">Antworten heute</span></div>
-          </div>
+    <main class="page home">
+      <div class="welcome">
+        <h1 id="hello">Hallo!</h1>
+        <div class="stat-chips">
+          <span class="stat-chip"><b id="stat-streak">0</b> <span id="stat-streak-label">Tage in Folge</span></span>
+          <span class="stat-chip"><b id="stat-today">0</b> <span id="stat-today-label">Antworten heute</span></span>
         </div>
-        <div class="stackbar big" id="hero-bar"><span class="known"></span><span class="learning"></span></div>
-        <div class="legend">
-          <span><i class="dot known"></i>Sitzt <b id="leg-known">0</b></span>
-          <span><i class="dot learning"></i>Am Lernen <b id="leg-learning">0</b></span>
-          <span><i class="dot fresh"></i>Neu <b id="leg-fresh">0</b></span>
-        </div>
-        <div class="hero-actions">
-          <button id="learn-all-btn" class="btn primary">Alle Stapel gemischt lernen</button>
-          <button id="words-btn" class="btn">Alle Wörter ansehen</button>
-        </div>
-      </section>
+      </div>
 
-      <section class="panel grammar-card">
-        <div class="hero-head">
-          <div>
-            <p class="eyebrow">Grammatik</p>
-            <p class="hero-number"><strong id="gc-due">0</strong> <span id="gc-due-label">Übungen fällig</span></p>
+      <div class="mode-grid">
+        <section class="mode-card">
+          <div class="mode-head">
+            <h2>Vokabeln</h2>
+            <span class="mode-figure"><b id="hero-known">0</b> / <span id="hero-total">0</span> sitzen</span>
           </div>
-          <p class="muted small" id="gc-known"></p>
-        </div>
-        <div class="stackbar" id="gc-bar"><span class="known"></span><span class="learning"></span></div>
-        <div class="hero-actions">
-          <button id="gc-train" class="btn primary">Grammatik trainieren</button>
-          <button id="gc-topics" class="btn">Alle Themen &amp; Erklärungen</button>
-        </div>
-      </section>
+          <div class="stackbar" id="hero-bar"><span class="known"></span><span class="learning"></span></div>
+          <div class="legend">
+            <span><i class="dot known"></i>Sitzt <b id="leg-known">0</b></span>
+            <span><i class="dot learning"></i>Am Lernen <b id="leg-learning">0</b></span>
+            <span><i class="dot fresh"></i>Neu <b id="leg-fresh">0</b></span>
+          </div>
+          <div class="mode-actions">
+            <button id="learn-all-btn" class="btn primary">Alle lernen</button>
+            <button id="words-btn" class="btn">Alle Wörter</button>
+          </div>
+        </section>
+
+        <section class="mode-card">
+          <div class="mode-head">
+            <h2>Grammatik</h2>
+            <span class="mode-figure"><b id="gc-known">0</b> / <span id="gc-total">0</span> sicher</span>
+          </div>
+          <div class="stackbar" id="gc-bar"><span class="known"></span><span class="learning"></span></div>
+          <div class="legend">
+            <span><i class="dot due"></i><b id="gc-due">0</b> <span id="gc-due-label">Übungen fällig</span></span>
+          </div>
+          <div class="mode-actions">
+            <button id="gc-train" class="btn primary">Trainieren</button>
+            <button id="gc-topics" class="btn">Themen</button>
+          </div>
+        </section>
+      </div>
 
       <div class="page-head">
-        <h1>Meine Stapel</h1>
-        <button id="new-deck-btn" class="btn primary">+ Neuer Stapel</button>
+        <h2>Meine Stapel</h2>
+        <button id="new-deck-btn" class="btn primary small">+ Neuer Stapel</button>
       </div>
       <div id="deck-list" class="deck-list"></div>
       <p id="deck-empty" class="empty" hidden>Noch keine Stapel. Lege deinen ersten Stapel an!</p>
@@ -140,8 +144,8 @@
       <div class="pill" id="edit-counter"></div>
     </header>
     <div class="actionbar">
-      <button id="edit-prev" class="btn">← Vorherige</button>
-      <button id="edit-delete" class="btn danger-ghost">Karte löschen</button>
+      <button id="edit-prev" class="btn">←<span class="tool-text"> Vorherige</span></button>
+      <button id="edit-delete" class="btn danger-ghost">Löschen</button>
       <div class="spacer"></div>
       <button id="edit-next" class="btn primary big">Speichern & weiter →</button>
     </div>
@@ -151,16 +155,16 @@
           <div class="card-label">Englisch <small>Vorderseite</small></div>
           <div class="flashcard"><canvas id="pad-en" class="pad"></canvas></div>
           <div class="card-tools">
-            <button class="tool" data-undo="en">↶ Rückgängig</button>
-            <button class="tool" data-clear="en">✕ Leeren</button>
+            <button class="tool" data-undo="en">↶<span class="tool-text"> Rückgängig</span></button>
+            <button class="tool" data-clear="en">✕<span class="tool-text"> Leeren</span></button>
           </div>
         </div>
         <div class="card-col">
           <div class="card-label">Deutsch <small>Rückseite</small></div>
           <div class="flashcard"><canvas id="pad-de" class="pad"></canvas></div>
           <div class="card-tools">
-            <button class="tool" data-undo="de">↶ Rückgängig</button>
-            <button class="tool" data-clear="de">✕ Leeren</button>
+            <button class="tool" data-undo="de">↶<span class="tool-text"> Rückgängig</span></button>
+            <button class="tool" data-clear="de">✕<span class="tool-text"> Leeren</span></button>
           </div>
         </div>
       </div>
@@ -227,8 +231,8 @@
           <div class="card-label" id="answer-label"></div>
           <div class="flashcard"><canvas id="pad-answer" class="pad"></canvas></div>
           <div class="card-tools">
-            <button class="tool" data-undo="answer">↶ Rückgängig</button>
-            <button class="tool" data-clear="answer">✕ Leeren</button>
+            <button class="tool" data-undo="answer">↶<span class="tool-text"> Rückgängig</span></button>
+            <button class="tool" data-clear="answer">✕<span class="tool-text"> Leeren</span></button>
           </div>
         </div>
       </div>
