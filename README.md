@@ -36,6 +36,15 @@ Browser (iPad)                    Vercel                 Supabase
   (MIT, in `web/vendor/`) für glatte, druckempfindliche Striche. Alle Karten nutzen
   ein festes 3:2-Koordinatensystem (600 × 400) und werden als 900 × 600 PNG gespeichert.
 
+## Wortlisten importieren
+
+- Stapel-Menü (⋯) → „Wörter importieren“ oder auf der Startseite „Liste importieren“
+  (legt einen neuen Stapel an). Format: eine Zeile pro Wort, `englisch ; deutsch`.
+  Auch Tab, ` = `, ` – `, ` - `, `|`-Tabellen, Aufzählungen und Nummerierung werden erkannt;
+  Zeilen ohne Trennzeichen (z. B. „Hier ist deine Liste:“) werden übersprungen.
+- Der Text wird im Browser als 900 × 600 PNG auf die Karte gezeichnet (`web/import.js`),
+  dadurch funktionieren importierte Karten wie handgeschriebene.
+
 ## Grammatik
 
 - Inhalte liegen versioniert im Frontend: `web/grammar/{tenses,clauses,words}.js`

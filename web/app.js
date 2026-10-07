@@ -1,5 +1,6 @@
 import { getStroke } from "./vendor/perfect-freehand.js";
 import { initGrammar } from "./grammar.js";
+import { initImport } from "./import.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
@@ -581,6 +582,19 @@ $("#new-deck-btn").addEventListener("click", async () => {
   }
 });
 
+// new deck straight from a word list
+$("#import-deck-btn").addEventListener("click", async () => {
+  const name = prompt("Name des neuen Stapels für die importierten Wörter:", "");
+  if (name === null) return;
+  try {
+    const deck = await api("/decks", { method: "POST", body: { name } });
+    await showHome();
+    importer.open(deck);
+  } catch (ex) {
+    toast(ex.message);
+  }
+});
+
 $("#learn-all-btn").addEventListener("click", () => openSetup(ALL_DECKS));
 $("#words-btn").addEventListener("click", () => showWords());
 
@@ -611,6 +625,7 @@ $("#menu").addEventListener("click", async (e) => {
   closeMenu();
   if (!deck) return;
   try {
+    if (action === "import") return importer.open(deck);
     if (action === "rename") {
       const name = prompt("Neuer Name:", deck.name);
       if (!name || !name.trim()) return;
@@ -1018,6 +1033,7 @@ $$("[data-home]").forEach((b) =>
 /* ------------------------------------------------------------------ */
 
 const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible });
+const importer = initImport({ api, toast, plural, onDone: () => showHome() });
 
 if (storage(TOKEN_KEY)) start().catch(() => show("view-login"));
 else show("view-login");
