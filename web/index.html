@@ -84,7 +84,10 @@
 
       <div class="page-head">
         <h2>Meine Stapel</h2>
-        <button id="new-deck-btn" class="btn primary small">+ Neuer Stapel</button>
+        <div class="head-actions">
+          <button id="import-deck-btn" class="btn small">Liste importieren</button>
+          <button id="new-deck-btn" class="btn primary small">+ Neuer Stapel</button>
+        </div>
       </div>
       <div id="deck-list" class="deck-list"></div>
       <p id="deck-empty" class="empty" hidden>Noch keine Stapel. Lege deinen ersten Stapel an!</p>
@@ -343,6 +346,7 @@
 
   <!-- Deck options menu -->
   <div id="menu" class="menu" hidden>
+    <button data-menu="import">Wörter importieren</button>
     <button data-menu="rename">Umbenennen</button>
     <button data-menu="delete" class="danger">Löschen</button>
   </div>
@@ -365,6 +369,24 @@
         <button type="submit" class="btn primary" id="form-submit">OK</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Import a word list -->
+  <dialog id="import-dialog" class="dialog import-dialog">
+    <h2 id="import-title">Wörter importieren</h2>
+    <p class="muted small">Eine Zeile pro Wort: <code>englisch ; deutsch</code> – z. B. aus deinem Claude-Chat kopieren und hier einfügen.</p>
+    <textarea id="import-text" rows="7" placeholder="negotiate ; verhandeln&#10;revenue ; Umsatz&#10;supply chain ; Lieferkette" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+    <div class="import-row">
+      <button type="button" class="btn small" id="import-paste">Aus Zwischenablage einfügen</button>
+      <strong class="small" id="import-count"></strong>
+    </div>
+    <p class="error small" id="import-skipped" hidden></p>
+    <ul class="import-preview" id="import-preview"></ul>
+    <div class="stackbar" id="import-progress" hidden><span class="known"></span></div>
+    <div class="dialog-actions">
+      <button type="button" class="btn ghost" id="import-cancel">Abbrechen</button>
+      <button type="button" class="btn primary" id="import-submit" disabled>Karten anlegen</button>
+    </div>
   </dialog>
 
   <div id="toast" class="toast" hidden></div>

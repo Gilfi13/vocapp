@@ -664,6 +664,43 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .home .deck { padding: 14px 16px 16px; gap: 10px; }
 .home .deck-name { font-size: 18px; }
 
+/* ---------- Import ---------- */
+.head-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.import-dialog { width: min(560px, calc(100vw - 24px)); display: flex; flex-direction: column; gap: 12px; }
+.import-dialog:not([open]) { display: none; }
+.import-dialog h2 { margin: 0; font-size: 20px; }
+.import-dialog p { margin: 0; }
+.import-dialog code { background: var(--blue-soft); color: var(--blue); padding: 1px 6px; border-radius: 6px; }
+#import-text {
+  width: 100%;
+  font: inherit;
+  font-size: 16px;
+  padding: 12px;
+  border: 1px solid var(--blue-line);
+  border-radius: 12px;
+  resize: vertical;
+  outline: none;
+  color: var(--text);
+}
+#import-text:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+.import-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+#import-count { color: var(--blue); }
+.import-preview {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  border-radius: 12px;
+  background: var(--bg);
+}
+.import-preview:empty { display: none; }
+.import-preview li { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--blue-soft); font-size: 15px; }
+.import-preview li:last-child { border-bottom: none; }
+.import-preview .arrow { color: var(--muted); }
+.import-preview .de { color: var(--muted); }
+.import-preview .more { display: block; color: var(--muted); text-align: center; }
+
 /* ---------- Small screens: stack the cards ---------- */
 @media (max-width: 700px) {
   .pair { flex-direction: column; gap: 14px; --card-w: min(calc(100vw - 40px), calc((100dvh - 330px) / 2 * 1.5)); }
