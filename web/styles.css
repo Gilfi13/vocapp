@@ -701,6 +701,48 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .import-preview .de { color: var(--muted); }
 .import-preview .more { display: block; color: var(--muted); text-align: center; }
 
+/* ---------- Subjects ---------- */
+.subject-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.subject-tile {
+  --subject: var(--blue);
+  background: var(--white);
+  border: none;
+  border-top: 5px solid var(--subject);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 18px;
+  min-height: 150px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text);
+}
+.subject-tile:active { transform: scale(.98); }
+.subject-tag {
+  align-self: flex-start;
+  min-width: 46px;
+  height: 46px;
+  padding: 0 8px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--white);
+  background: var(--subject);
+  margin-bottom: auto;
+}
+.subject-name { font-weight: 700; font-size: 20px; margin-top: 12px; }
+.subject-short { font-size: 14px; }
+.subject-nav { position: sticky; top: 0; z-index: 1; background: var(--bg); padding: 8px 0; margin-bottom: 8px; }
+.subject-section { margin-bottom: 16px; scroll-margin-top: 64px; }
+.subject-section h2 { color: var(--blue); font-size: 22px; margin: 16px 0 0; }
+.subject-soon { font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
+.gram code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .9em; background: var(--blue-soft); padding: 1px 5px; border-radius: 5px; }
+.gram pre { background: #0f1b2d; color: #e6edf6; border-radius: 12px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; margin: 12px 0; }
+.gram pre code { background: none; padding: 0; font-size: 14px; color: inherit; }
+
 /* ---------- Small screens: stack the cards ---------- */
 @media (max-width: 700px) {
   .pair { flex-direction: column; gap: 14px; --card-w: min(calc(100vw - 40px), calc((100dvh - 330px) / 2 * 1.5)); }
@@ -730,6 +772,12 @@ button { font: inherit; cursor: pointer; color: inherit; }
   .home .page-head { margin: 22px 0 10px; }
   .page-head h2 { font-size: 20px; }
   .deck-list { gap: 10px; }
+  .subject-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .subject-tile { min-height: 130px; padding: 16px 14px; }
+  .subject-name { font-size: 18px; }
+  .gram pre code { font-size: 12.5px; }
+  .subject-nav { flex-wrap: nowrap; overflow-x: auto; margin: 0 -14px 8px; padding: 8px 14px; scrollbar-width: none; }
+  .subject-nav .chip { flex: none; }
 
   /* writing views: action bar moves below the cards */
   #view-learn .actionbar, #view-edit .actionbar {

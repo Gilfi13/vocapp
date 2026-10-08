@@ -1,6 +1,13 @@
-# Vocapp
+# MyStudy
 
-Vokabel-Karteikarten mit Handschrift (iPad + Apple Pencil).
+Lern-App fürs Studium. Die Startseite zeigt eine Kachel pro Fach:
+
+- **Englisch**: Vokabel-Karteikarten mit Handschrift (iPad + Apple Pencil) und Grammatik.
+- **Datenbanken**: SQL-Spickzettel für MySQL (`web/subjects/datenbanken.js`) mit Links zum Üben.
+- **Mathe, DEM, Programmieren, Management**: noch leer („Kommt bald“).
+
+Fächer stehen in `web/subjects/index.js`. Ein Fach mit `content` (Abschnitte als HTML + Links)
+bekommt automatisch eine Seite mit Sprung-Leiste.
 
 ## Architektur
 

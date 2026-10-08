@@ -1,6 +1,7 @@
 import { getStroke } from "./vendor/perfect-freehand.js";
 import { initGrammar } from "./grammar.js";
 import { initImport } from "./import.js";
+import { initSubjects } from "./subjects/index.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
@@ -339,14 +340,14 @@ function logout() {
   show("view-login");
 }
 
-// Load the logged-in user, then open the overview.
+// Load the logged-in user, then open the subject tiles.
 async function start() {
   me = await api("/me");
   $("#user-name").textContent = me.username;
   $("#hello").textContent = `Hallo, ${me.username[0].toUpperCase()}${me.username.slice(1)}!`;
   $("#user-initial").textContent = me.username[0];
   $('[data-user="users"]').hidden = !me.is_admin;
-  await showHome();
+  subjects.showSubjects();
 }
 
 /* ---------- user menu ---------- */
@@ -1032,6 +1033,7 @@ $$("[data-home]").forEach((b) =>
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 
+const subjects = initSubjects({ show, onEnglish: () => showHome() });
 const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible });
 const importer = initImport({ api, toast, plural, onDone: () => showHome() });
 
