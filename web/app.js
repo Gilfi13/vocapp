@@ -10,6 +10,7 @@ const SESSION_KEY = (deckId) => `vocapp.session.${me?.id}.${deckId}`;
 const LANG = { en: "Englisch", de: "Deutsch" };
 const ALL_DECKS = { id: "all", name: "Alle Stapel" };
 const KNOWN_BOX = 2; // same rule as the backend: from box 2 on a word "sitzt"
+const ROUND_SIZE = 10; // words per learning round
 
 let me = null; // logged-in user {id, username, is_admin}
 
@@ -852,7 +853,9 @@ async function openSetup(deck) {
     learn.loaded = true;
     const { known } = countStatus(cards);
     const unsure = cards.length - known;
-    $("#setup-info").textContent = `${plural(cards.length, "Karte", "Karten")} · ${known} ${known === 1 ? "sitzt" : "sitzen"} schon`;
+    $("#setup-info").textContent =
+      `${plural(cards.length, "Karte", "Karten")} · ${known} ${known === 1 ? "sitzt" : "sitzen"} schon` +
+      ` · eine Runde hat ${Math.min(ROUND_SIZE, cards.length)} Wörter`;
     const only = $("#only-unsure");
     only.disabled = unsure === 0 || unsure === cards.length;
     if (only.disabled) only.checked = false;
@@ -862,25 +865,46 @@ async function openSetup(deck) {
   }
 }
 
-$$(".choice").forEach((btn) =>
-  btn.addEventListener("click", () => {
-    if (!learn.loaded) return toast("Karten werden noch geladen …");
-    let cards = [...learn.cards.values()];
-    if ($("#only-unsure").checked) cards = cards.filter((c) => cardStatus(c) !== "known");
-    if (!cards.length) return toast("Keine Karten zum Lernen.");
-    const ids = cards.map((c) => c.id);
-    if ($("#shuffle").checked) shuffle(ids);
-    learn.session = {
-      deckId: learn.deck.id,
-      dir: btn.dataset.dir, // side shown first
-      queue: ids,
-      total: ids.length,
-      wrong: 0,
-      nowKnown: 0,
-    };
-    startLearning();
-  }),
-);
+// Pick the next ROUND_SIZE cards: words already in progress first (lowest box
+// first), then new ones, and words that already "sitzen" only when nothing else is left.
+function pickRound(cards, mix) {
+  const order = mix ? shuffle([...cards]) : cards;
+  const rank = (c) => {
+    const st = cardStatus(c);
+    return st === "learning" ? c.box : st === "fresh" ? KNOWN_BOX : KNOWN_BOX + 1;
+  };
+  const byPriority = order
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const d = rank(a.c) - rank(b.c);
+      if (d) return d;
+      // among known words, repeat the ones not seen for the longest time
+      if (cardStatus(a.c) === "known") return String(a.c.last_reviewed).localeCompare(String(b.c.last_reviewed));
+      return a.i - b.i;
+    })
+    .slice(0, ROUND_SIZE)
+    .map(({ c }) => c.id);
+  return mix ? shuffle(byPriority) : byPriority;
+}
+
+function startRound(dir) {
+  if (!learn.loaded) return toast("Karten werden noch geladen …");
+  let cards = [...learn.cards.values()];
+  if ($("#only-unsure").checked) cards = cards.filter((c) => cardStatus(c) !== "known");
+  if (!cards.length) return toast("Keine Karten zum Lernen.");
+  const ids = pickRound(cards, $("#shuffle").checked);
+  learn.session = {
+    deckId: learn.deck.id,
+    dir, // side shown first
+    queue: ids,
+    total: ids.length,
+    wrong: 0,
+    nowKnown: 0,
+  };
+  startLearning();
+}
+
+$$(".choice").forEach((btn) => btn.addEventListener("click", () => startRound(btn.dataset.dir)));
 
 $("#resume-btn").addEventListener("click", () => {
   if (!learn.loaded) return toast("Karten werden noch geladen …");
@@ -1011,7 +1035,9 @@ async function finishLearning() {
     (s.nowKnown ? ` (+${s.nowKnown} neu)` : "");
 }
 
-$("#again-btn").addEventListener("click", () => openSetup(learn.deck));
+// next round with the same settings; the picker brings the words that don't sit yet
+$("#again-btn").addEventListener("click", () => startRound(learn.session.dir));
+$("#setup-btn").addEventListener("click", () => openSetup(learn.deck));
 
 /* ------------------------------------------------------------------ */
 /* Navigation                                                          */
