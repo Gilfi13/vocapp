@@ -1,6 +1,6 @@
 {
-  "name": "Vocapp",
-  "short_name": "Vocapp",
+  "name": "MyStudy",
+  "short_name": "MyStudy",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f5f8fd",

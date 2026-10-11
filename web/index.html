@@ -6,9 +6,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Vocapp">
+  <meta name="apple-mobile-web-app-title" content="MyStudy">
   <meta name="theme-color" content="#ffffff">
-  <title>Vocapp</title>
+  <title>MyStudy</title>
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -19,8 +19,8 @@
   <!-- Login -->
   <section id="view-login" class="view center" hidden>
     <form id="login-form" class="login-card">
-      <div class="logo">Voc<span>app</span></div>
-      <p class="muted">Vokabeln lernen mit Stift</p>
+      <div class="logo">My<span>Study</span></div>
+      <p class="muted">Lernen fürs Studium</p>
       <label>Benutzername
         <input id="login-user" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
       </label>
@@ -32,16 +32,43 @@
     </form>
   </section>
 
-  <!-- Home: progress + decks -->
-  <section id="view-home" class="view" hidden>
+  <!-- Start: one tile per subject -->
+  <section id="view-subjects" class="view" hidden>
     <header class="topbar">
-      <div class="logo small">Voc<span>app</span></div>
+      <div class="logo small">My<span>Study</span></div>
       <div class="spacer"></div>
       <button id="user-btn" class="user-btn"><span class="avatar" id="user-initial"></span><span id="user-name"></span><span class="caret">▾</span></button>
     </header>
+    <main class="page">
+      <div class="welcome">
+        <div>
+          <h1 id="hello">Hallo!</h1>
+          <p class="muted">Welches Fach lernst du heute?</p>
+        </div>
+      </div>
+      <div id="subject-grid" class="subject-grid"></div>
+    </main>
+  </section>
+
+  <!-- Subject page (cheat sheet or placeholder) -->
+  <section id="view-subject" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-subjects>← Fächer</button>
+      <div class="title" id="subject-title"></div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page narrow-ish" id="subject-page"></main>
+  </section>
+
+  <!-- Englisch: progress + decks -->
+  <section id="view-home" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-subjects>← Fächer</button>
+      <div class="title">Englisch</div>
+      <div class="spacer-btn"></div>
+    </header>
     <main class="page home">
       <div class="welcome">
-        <h1 id="hello">Hallo!</h1>
         <div class="stat-chips">
           <span class="stat-chip"><b id="stat-streak">0</b> <span id="stat-streak-label">Tage in Folge</span></span>
           <span class="stat-chip"><b id="stat-today">0</b> <span id="stat-today-label">Antworten heute</span></span>
@@ -97,7 +124,7 @@
   <!-- User management (admin) -->
   <section id="view-users" class="view" hidden>
     <header class="topbar">
-      <button class="btn ghost" data-home>← Übersicht</button>
+      <button class="btn ghost" data-subjects>← Fächer</button>
       <div class="title">Benutzer</div>
       <div class="spacer-btn"></div>
     </header>
