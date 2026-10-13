@@ -140,6 +140,48 @@ export default [
   },
 
   {
+    id: "passive-modals",
+    cat: "Satzbau",
+    title: "Passive modals (Passiv mit Modalverben)",
+    short: "must be used, can't be copied, have to be respected",
+    links: [
+      { t: "British Council – Passives", u: `${BC}/b1-b2/passives` },
+      { t: "British Council – Modal verbs", u: `${BC}/english-grammar-reference/modal-verbs` },
+    ],
+    html: `
+<p class="lead">Passiv mit Modalverb = <b>Modalverb + be + past participle</b> (3. Form): <i>must <b>be used</b></i>, <i>can't <b>be copied</b></i>, <i>may <b>be implemented</b></i>.</p>
+<ul>
+<li><b>be bleibt immer be</b> – nie <s>is/are/been</s>, egal ob Einzahl oder Mehrzahl: <i>The rule must <b>be</b> followed.</i> · <i>The rules must <b>be</b> followed.</i></li>
+<li>Modalverben mit <b>to</b>: das <i>to</i> steht vor <i>be</i>: <i>have <b>to be</b> respected</i>, <i>need <b>to be</b> written</i>, <i>ought <b>to be</b> fined</i>.</li>
+<li>Verneinung von <i>have to</i> mit <b>do/does</b>: <i>Permission <b>doesn't have to be</b> requested.</i></li>
+</ul>
+<h3>Passiv oder Aktiv?</h3>
+<p>Frage: <b>Handelt das Subjekt selbst</b> (Aktiv) oder <b>wird etwas mit ihm gemacht</b> (Passiv)?</p>
+<ul>
+<li>Aktiv: <i>AI developers <b>can use</b> any material.</i> – die Entwickler benutzen selbst.</li>
+<li>Passiv: <i>Copyrighted material <b>must be used</b> legally.</i> – das Material wird benutzt.</li>
+</ul>
+<div class="tip"><b>Trick:</b> Steht nach der Lücke ein <b>Objekt</b> (<i>… can use <u>any material</u></i>), ist es meist Aktiv.</div>
+<div class="tip"><b>Deutscher Vergleich:</b> <i>muss benutzt <b>werden</b></i> = <i>must <b>be used</b></i>. Wo man im Deutschen „werden“ sagt, braucht man im Englischen <b>be + 3. Form</b>.</div>`,
+    ex: [
+      { id: "pmod-01", t: "g", q: "Universal believes that copyrighted material ___ (must / use) legally.", a: ["must be used"], e: "Das Material wird benutzt → Passiv: must + be + 3. Form." },
+      { id: "pmod-02", t: "g", q: "Copyrights ___ (have to / respect) to protect writers and artists.", a: ["have to be respected"], e: "Passiv mit have to: das to steht vor be → have to be respected." },
+      { id: "pmod-03", t: "g", q: "AI developers ___ (can / use) any material that isn't copyrighted.", a: ["can use"], e: "Aktiv: Das Subjekt handelt selbst – die Entwickler benutzen das Material (Objekt: any material)." },
+      { id: "pmod-04", t: "g", q: "New rules ___ (need / write) carefully to ensure they're fair to everyone.", a: ["need to be written"], e: "Regeln werden geschrieben → Passiv; need to + be + 3. Form." },
+      { id: "pmod-05", t: "g", q: "Song lyrics and other copyrighted material ___ (can / find) online.", a: ["can be found"], e: "Die Texte werden gefunden → Passiv: can be found." },
+      { id: "pmod-06", t: "g", q: "Copyrighted materials ___ (can't / copy) without permission.", a: ["can't be copied", "cannot be copied"], e: "Materialien werden (nicht) kopiert → Passiv: can't be copied. be bleibt be, auch im Plural." },
+      { id: "pmod-07", t: "g", q: "Music publishers ___ (may / choose) to license their songs with multiple chatbots.", a: ["may choose"], e: "Aktiv: Das Subjekt handelt selbst – die Verlage entscheiden sich (to license …)." },
+      { id: "pmod-08", t: "g", q: "If material isn't copyrighted, then permission ___ (not have to / request).", a: ["doesn't have to be requested", "does not have to be requested"], e: "Verneinung von have to mit does → doesn't have to be requested." },
+      { id: "pmod-09", t: "g", q: "Chatbots ___ (shouldn't / copy) songs word-for-word.", a: ["shouldn't copy", "should not copy"], e: "Aktiv: Das Subjekt handelt selbst – die Chatbots kopieren die Songs (Objekt: songs)." },
+      { id: "pmod-10", t: "g", q: "Anyone using copyrighted material illegally ___ (ought / fine).", a: ["ought to be fined"], e: "Die Person wird bestraft → Passiv; ought to + be + 3. Form." },
+      { id: "pmod-11", t: "g", q: "The rights of content creators ___ (must not / forget).", a: ["must not be forgotten", "mustn't be forgotten"], e: "Rechte werden (nicht) vergessen → Passiv: must not be forgotten (3. Form: forgotten)." },
+      { id: "pmod-12", t: "g", q: "Deals ___ (could / make) between music publishers and AI developers.", a: ["could be made"], e: "Deals werden gemacht → Passiv: could be made." },
+      { id: "pmod-13", t: "g", q: "Music publishers ___ (ought / take) this opportunity to adapt to the future.", a: ["ought to take"], e: "Aktiv: Das Subjekt handelt selbst – die Verlage ergreifen die Chance (Objekt: this opportunity)." },
+      { id: "pmod-14", t: "g", q: "New regulations ___ (may / implement) soon.", a: ["may be implemented"], e: "Vorschriften werden umgesetzt → Passiv: may be implemented." },
+    ],
+  },
+
+  {
     id: "reported",
     cat: "Satzbau",
     title: "Reported speech (indirekte Rede)",
