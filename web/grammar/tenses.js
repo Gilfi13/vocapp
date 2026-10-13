@@ -9,7 +9,7 @@ export default [
   {
     id: "present",
     cat: "Zeiten",
-    title: "Present simple vs. present continuous",
+    title: "Wann present simple, wann present continuous?",
     short: "Gewohnheit oder gerade jetzt? Plus: Zustandsverben",
     links: [
       { t: "British Council – Present simple", u: `${BC}/english-grammar-reference/present-simple` },
@@ -73,6 +73,12 @@ export default [
       { id: "present-12", t: "c", q: "Look! The chef ___ the soup to check the salt.", o: ["tastes", "is tasting"], a: 1, e: "taste = probieren (Handlung, gerade jetzt) → Verlaufsform." },
       { id: "present-13", t: "c", q: "You ___ very rude today – that's not like you.", o: ["are", "are being"], a: 1, e: "be + -ing = sich (vorübergehend) so verhalten. „You are rude“ wäre eine Charaktereigenschaft." },
       { id: "present-14", t: "c", q: "How often ___ to the library?", o: ["are you going", "do you go"], a: 1, e: "How often = Gewohnheit → present simple." },
+      { id: "present-15", t: "g", q: "I usually ___ (walk) to university.", a: ["walk"], e: "usually = Gewohnheit → present simple." },
+      { id: "present-16", t: "g", q: "Look! It ___ (snow).", a: ["is snowing", "'s snowing"], e: "Look! = passiert gerade jetzt → present continuous." },
+      { id: "present-17", t: "g", q: "She ___ (not / like) coffee.", a: ["doesn't like", "does not like"], e: "like ist ein Zustandsverb → present simple; Verneinung mit doesn't." },
+      { id: "present-18", t: "g", q: "At the moment I ___ (write) my bachelor thesis.", a: ["am writing", "'m writing"], e: "at the moment = vorübergehend/gerade → present continuous." },
+      { id: "present-19", t: "g", q: "He ___ (speak) three languages fluently.", a: ["speaks"], e: "Dauerhafte Fähigkeit → present simple (he/she/it → -s)." },
+      { id: "present-20", t: "c", q: "Why ___ an umbrella? It isn't raining.", o: ["do you carry", "are you carrying"], a: 1, e: "Es geht um genau jetzt (gerade trägst du einen Schirm) → present continuous." },
     ],
   },
 

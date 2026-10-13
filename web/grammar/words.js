@@ -182,15 +182,64 @@ export default [
   },
 
   {
+    id: "much-many",
+    cat: "Wörter",
+    title: "Wann much, wann many?",
+    short: "Zählbar oder nicht? Plus: a lot of, How much / How many",
+    links: [
+      { t: "British Council – Quantifiers", u: `${BC}/english-grammar-reference/quantifiers` },
+      { t: "British Council – Count nouns and uncount nouns", u: `${BC}/english-grammar-reference/count-nouns` },
+    ],
+    html: `
+<p class="lead"><b>many</b> für Dinge, die man <b>zählen</b> kann (Plural), <b>much</b> für Dinge, die man <b>nicht zählen</b> kann (kein Plural).</p>
+<table>
+<tr><th></th><th>many – zählbar</th><th>much – nicht zählbar</th></tr>
+<tr><td>Nomen</td><td>books, people, students, cars, ideas</td><td>water, money, time, information, homework</td></tr>
+<tr><td>Frage</td><td><b>How many</b> books do you have?</td><td><b>How much</b> money do you have?</td></tr>
+<tr><td>Verneinung</td><td>There aren't <b>many</b> people here.</td><td>I don't have <b>much</b> time.</td></tr>
+<tr><td>zu viel</td><td><b>too many</b> mistakes</td><td><b>too much</b> sugar</td></tr>
+</table>
+<div class="tip"><b>Test:</b> Kann man „eins, zwei, drei …“ davorsetzen? <i>three books</i> ✔ → <b>many</b>. <s>three moneys</s> ✘ → <b>much</b>. Man zählt Geld in Euro (<i>many euros</i>), aber <i>money</i> selbst ist nicht zählbar.</div>
+<h3>Achtung: anders als im Deutschen nicht zählbar</h3>
+<p><i>information, advice, news, homework, furniture, luggage, equipment, research, progress, knowledge</i> → immer <b>much</b>: <i>How <b>much</b> homework do we have?</i></p>
+<h3>In positiven Sätzen: a lot of</h3>
+<ul>
+<li><i>much</i> und <i>many</i> stehen vor allem in <b>Fragen</b> und <b>Verneinungen</b>.</li>
+<li>In positiven Aussagen klingt <b>a lot of / lots of</b> natürlicher – für beide Arten: <i>She has <b>a lot of</b> friends. We have <b>a lot of</b> time.</i></li>
+<li>Nach <i>too, so, as</i> ist much/many aber auch positiv normal: <i>You eat <b>too much</b> chocolate. There were <b>so many</b> people!</i></li>
+</ul>
+<div class="warn"><b>Typische Fehler:</b> <s>How many money</s> → <b>How much money</b> · <s>many informations</s> → <b>much information</b> · <s>much people</s> → <b>many people</b> (people ist Plural).</div>`,
+    ex: [
+      { id: "mm-01", t: "c", q: "How ___ money do you have?", o: ["much", "many"], a: 0, e: "money ist nicht zählbar → much." },
+      { id: "mm-02", t: "c", q: "How ___ books did you read last year?", o: ["much", "many"], a: 1, e: "books ist zählbar (Plural) → many." },
+      { id: "mm-03", t: "c", q: "There aren't ___ people in the library today.", o: ["much", "many"], a: 1, e: "people ist Plural (zählbar) → many." },
+      { id: "mm-04", t: "c", q: "I don't have ___ time this week.", o: ["much", "many"], a: 0, e: "time (Zeit) ist nicht zählbar → much." },
+      { id: "mm-05", t: "c", q: "How ___ homework do we have for tomorrow?", o: ["much", "many"], a: 0, e: "homework ist im Englischen nicht zählbar → much." },
+      { id: "mm-06", t: "c", q: "You put too ___ sugar in my coffee.", o: ["much", "many"], a: 0, e: "sugar ist nicht zählbar → too much." },
+      { id: "mm-07", t: "c", q: "There were too ___ mistakes in my essay.", o: ["much", "many"], a: 1, e: "mistakes ist zählbar → too many." },
+      { id: "mm-08", t: "c", q: "We didn't get ___ information about the exam.", o: ["much", "many"], a: 0, e: "information ist nicht zählbar → much (nicht informations)." },
+      { id: "mm-09", t: "c", q: "How ___ students are in your course?", o: ["much", "many"], a: 1, e: "students ist zählbar → many." },
+      { id: "mm-10", t: "c", q: "How ___ water should I drink every day?", o: ["much", "many"], a: 0, e: "water ist nicht zählbar → much." },
+      { id: "mm-11", t: "c", q: "How ___ glasses of water do you drink a day?", o: ["much", "many"], a: 1, e: "Jetzt zählt man glasses (Gläser) → many." },
+      { id: "mm-12", t: "c", q: "She has ___ friends at university. (positiver Satz, natürlich klingend)", o: ["a lot of", "much", "many of"], a: 0, e: "In positiven Aussagen klingt a lot of am natürlichsten." },
+      { id: "mm-13", t: "c", q: "He doesn't give ___ advice.", o: ["much", "many"], a: 0, e: "advice ist nicht zählbar → much." },
+      { id: "mm-14", t: "c", q: "Ist der Satz korrekt? „How many money does it cost?“", o: ["Ja", "Nein – How much money …"], a: 1, e: "money ist nicht zählbar → How much. Meistens einfach: How much does it cost?" },
+      { id: "mm-15", t: "g", q: "How ___ chairs do we need for the meeting?", a: ["many"], e: "chairs ist zählbar → many." },
+      { id: "mm-16", t: "g", q: "How ___ furniture is in the new flat?", a: ["much"], e: "furniture ist nicht zählbar (anders als „Möbel“) → much." },
+    ],
+  },
+
+  {
     id: "quantifiers",
     cat: "Wörter",
-    title: "Countable/uncountable: much, many, few, little, some, any",
+    title: "Countable/uncountable: few, little, some, any & Co.",
     short: "information, advice & Co. – und few vs. a few",
     links: [
       { t: "British Council – Common problems with count and uncount nouns", u: `${BC}/english-grammar-reference/common-problems-count-uncount-nouns` },
       { t: "British Council – Determiners and quantifiers", u: `${BC}/english-grammar-reference/determiners-quantifiers` },
     ],
     html: `
+<p class="lead">Ausführlich zu <i>much</i> und <i>many</i>: siehe Kachel <b>„Wann much, wann many?“</b>.</p>
 <h3>Nicht zählbar im Englischen (oft anders als im Deutschen)</h3>
 <p><i><b>information, advice, news, furniture, luggage/baggage, equipment, research, evidence, knowledge, homework, progress, feedback, software</b></i><br>
 → kein Plural, kein a/an: <i>some advice / a piece of advice</i>, <i>The news <b>is</b> good.</i></p>
