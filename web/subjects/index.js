@@ -1,17 +1,18 @@
 // Start page: one tile per subject. Englisch opens the vocabulary + grammar page,
-// Datenbanken the MySQL cheat sheet, the others a placeholder for now.
+// Mathe the flashcards (web/math.js), Datenbanken the MySQL cheat sheet,
+// the others a placeholder for now.
 import datenbanken from "./datenbanken.js";
 
 export const SUBJECTS = [
   { id: "englisch", name: "Englisch", short: "Vokabeln & Grammatik", tag: "EN", color: "#1f6feb" },
-  { id: "mathe", name: "Mathe", short: "Kommt bald", tag: "∑", color: "#e5484d" },
+  { id: "mathe", name: "Mathe", short: "Karteikarten: Symbole & Begriffe", tag: "∑", color: "#e5484d" },
   { id: "dem", name: "DEM", short: "Kommt bald", tag: "DEM", color: "#8e4ec6" },
   { id: "datenbanken", name: "Datenbanken", short: "SQL-Spickzettel (MySQL)", tag: "SQL", color: "#1f9d55", content: datenbanken },
   { id: "programmieren", name: "Programmieren", short: "Kommt bald", tag: "</>", color: "#f76b15" },
   { id: "management", name: "Management", short: "Kommt bald", tag: "MGT", color: "#0d9488" },
 ];
 
-export function initSubjects({ show, onEnglish }) {
+export function initSubjects({ show, onEnglish, onMath }) {
   const $ = (sel) => document.querySelector(sel);
 
   function showSubjects() {
@@ -36,6 +37,7 @@ export function initSubjects({ show, onEnglish }) {
 
   function openSubject(s) {
     if (s.id === "englisch") return onEnglish();
+    if (s.id === "mathe") return onMath();
     $("#subject-title").textContent = s.name;
     const page = $("#subject-page");
     page.innerHTML = "";

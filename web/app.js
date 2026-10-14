@@ -1,6 +1,7 @@
 import { getStroke } from "./vendor/perfect-freehand.js";
 import { initGrammar } from "./grammar.js";
 import { initImport } from "./import.js";
+import { initMath } from "./math.js";
 import { initSubjects } from "./subjects/index.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
@@ -1059,7 +1060,8 @@ $$("[data-home]").forEach((b) =>
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 
-const subjects = initSubjects({ show, onEnglish: () => showHome() });
+const math = initMath({ api, show, toast, setBar, plural, shuffle, isVisible });
+const subjects = initSubjects({ show, onEnglish: () => showHome(), onMath: () => math.showMath() });
 const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible });
 const importer = initImport({ api, toast, plural, onDone: () => showHome() });
 

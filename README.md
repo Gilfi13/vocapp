@@ -3,8 +3,9 @@
 Lern-App fürs Studium. Die Startseite zeigt eine Kachel pro Fach:
 
 - **Englisch**: Vokabel-Karteikarten mit Handschrift (iPad + Apple Pencil) und Grammatik.
+- **Mathe**: Karteikarten zu Symbolen und Begriffen (Angewandte Statistik und Mathematik, HNU WS 2026/27).
 - **Datenbanken**: SQL-Spickzettel für MySQL (`web/subjects/datenbanken.js`) mit Links zum Üben.
-- **Mathe, DEM, Programmieren, Management**: noch leer („Kommt bald“).
+- **DEM, Programmieren, Management**: noch leer („Kommt bald“).
 
 Fächer stehen in `web/subjects/index.js`. Ein Fach mit `content` (Abschnitte als HTML + Links)
 bekommt automatisch eine Seite mit Sprung-Leiste.
@@ -51,6 +52,16 @@ Browser (iPad)                    Vercel                 Supabase
   Zeilen ohne Trennzeichen (z. B. „Hier ist deine Liste:“) werden übersprungen.
 - Der Text wird im Browser als 900 × 600 PNG auf die Karte gezeichnet (`web/import.js`),
   dadurch funktionieren importierte Karten wie handgeschriebene.
+
+## Mathe-Karteikarten
+
+- Karten liegen versioniert im Frontend: `web/math/cards.js`, gruppiert nach Kapiteln
+  (Logik, Mengen, Zahlenmengen, Funktionen, Grenzwerte). Jede Karte: `f` = Vorderseite
+  (Symbol/Begriff), `n` = Name, `d` = Bedeutung, `b` = Beispiel. Formeln als Unicode,
+  Brüche/Limes/Σ über kleine Helfer (`frac`, `lim`, `big`, `ol`) und CSS.
+- Abfragen: Training (fällige + 10 neue), ein ganzes Kapitel oder eine einzelne Karte.
+- Fortschritt nutzt dieselben Endpunkte wie die Grammatik (`/grammar`, `grammar_progress`),
+  die Karten-ids beginnen mit `ma-` – kein eigenes Backend nötig.
 
 ## Grammatik
 
