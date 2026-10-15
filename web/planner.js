@@ -67,6 +67,12 @@ const emojiOf = (it) => it.emoji || KIND_DEF[subKind(it)].emoji;
 const isOpenTodo = (it) => kindOf(it) === "todo" && !it.done;
 const newId = () => "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 
+// Small Claude-style starburst for suggestions that came from "Tag planen" or the Claude chat.
+const AI_LOGO = '<svg viewBox="0 0 24 24" aria-hidden="true"><g stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 3v6M12 15v6M3 12h6M15 12h6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M18.4 5.6l-4.2 4.2M9.8 14.2l-4.2 4.2"/></g></svg>';
+const aiKind = (it) => it.aiNew ? (it.aiNew === "regel" ? "regel" : "claude")
+  : it.aiPlanned ? it.aiPlanned
+  : (it.kind === "pause" && it.source === "plan") ? (it.aiBy || "regel") : null;
+
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -326,7 +332,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
   function placeAt(id, start) {
     const it = items.get(id);
     if (!it) return;
-    patch(id, { date: cur, start: fromMin(Math.max(0, Math.min(1435, start))) });
+    const { aiPlanned, aiPrev, aiNew, ...rest } = it;
+    save(id, { ...rest, date: cur, start: fromMin(Math.max(0, Math.min(1435, start))) });
     toast(`„${it.title}“ um ${fromMin(start)} eingeplant`);
   }
 
@@ -355,7 +362,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const card = el("div", "card");
     const ttl = el("button", "ttl", it.title || (k === "pause" ? "Pause" : "Ohne Titel"));
     ttl.onclick = () => openSheet(it.id, null, it.date);
-    card.append(ttl);
+    const head = el("div", "pl-ttlrow");
+    head.append(ttl);
+    if (aiKind(it) && !it.done) head.append(aiBadge(it));
+    card.append(head);
     const meta = el("span", "meta");
     meta.append(fmtDur(durOf(it)));
     if (it.source === "travel") meta.append(el("span", "pl-pill", "Anfahrt"));
@@ -381,6 +391,33 @@ export function initPlanner({ api, show, toast, openStudy }) {
     }
     r.append(tm, cap, card, k === "todo" ? checkBtn(it) : el("span"));
     return r;
+  }
+
+  // Claude logo + ✕: take back what Claude (or the auto planner) suggested, without opening the entry
+  function aiBadge(it) {
+    const kindAi = aiKind(it);
+    const wrap = el("span", "pl-ai" + (kindAi === "regel" ? " rule" : ""));
+    const logo = el("span", "logo");
+    logo.innerHTML = AI_LOGO;
+    logo.title = kindAi === "claude" ? "Von Claude vorgeschlagen" : "Automatisch geplant";
+    const x = el("button", "x", "✕");
+    x.setAttribute("aria-label", "Vorschlag zurücknehmen");
+    x.onclick = (e) => { e.stopPropagation(); dismissAi(it.id); };
+    wrap.append(logo, x);
+    return wrap;
+  }
+
+  function dismissAi(id) {
+    const it = items.get(id);
+    if (!it) return;
+    if (it.aiNew || (kindOf(it) === "pause" && it.source === "plan")) {
+      sync([], [id]);
+      return toast(`„${it.title || "Pause"}“ entfernt`);
+    }
+    const prev = it.aiPrev || {};
+    const { aiPlanned, aiPrev, ...rest } = it;
+    save(id, { ...rest, date: prev.date ?? null, start: prev.start ?? null });
+    toast(`„${it.title}“ ist wieder offen`);
   }
 
   function studyButton(it, small) {
@@ -414,6 +451,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const list = inboxItems(cur);
     $("#pl-inbox-count").textContent = list.length ? `${list.length} offen` : "";
     $("#pl-tab-count").textContent = list.length ? `· ${list.length}` : "";
+    $("#pl-bar-count").textContent = list.length ? String(list.length) : "";
     if (!list.length) {
       box.append(el("p", "pl-empty small", "Alles eingeplant. Neue To-dos warten hier, bis sie einen Platz im Tag bekommen."));
       return;
@@ -434,6 +472,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         else if (it.priority === 1) { m.append(el("span", "late", "wichtig"), el("br")); }
         m.append(fmtDur(durOf(it)));
         li.append(checkBtn(it), el("span", "e", emojiOf(it)), tt, m);
+        if (it.aiNew) li.append(aiBadge(it));
         if (it.link) li.append(studyButton(it, true));
         ul.append(li);
       }
@@ -681,8 +720,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
       if ((kind === "termin" || kind === "pause") && !s) { start.focus(); return; }
       let d = date.value || null;
       if (s && !d) d = cur;
+      const { aiPlanned, aiPrev, aiNew, ...base } = it || {};
       const data = {
-        ...(it || {}),
+        ...base,
         title: t || "Pause",
         kind: kind === "pausetask" ? "todo" : kind,
         forBreak: kind === "pausetask",
@@ -929,7 +969,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     for (const s of plan.schedule) {
       if (s.start < 0 || s.start >= 1440 || placed.has(s.id)) continue;
       placed.add(s.id);
-      upsert.push({ id: s.id, data: { ...items.get(s.id), date, start: fromMin(s.start) } });
+      const old = items.get(s.id);
+      upsert.push({ id: s.id, data: {
+        ...old, date, start: fromMin(s.start), aiPlanned: by,
+        aiPrev: old.aiPlanned ? old.aiPrev : { date: old.date ?? null, start: old.start ?? null },
+      } });
     }
     for (const t of ctx.todos) {
       if (!placed.has(t.id) && t.date === date && toMin(t.start) != null) upsert.push({ id: t.id, data: { ...items.get(t.id), start: null } });
@@ -941,7 +985,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         data: {
           title: p.title, kind: "pause", forBreak: false, duration: p.duration, date, start: fromMin(p.start),
           done: false, color: "yellow", emoji: /mittag/i.test(p.title) ? "🍽️" : "☕", repeat: "none",
-          source: "plan", createdAt: new Date().toISOString(),
+          source: "plan", aiBy: by, createdAt: new Date().toISOString(),
         },
       });
     }
@@ -993,7 +1037,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     b.textContent = "Plan leeren";
     const all = dayItems(cur);
     await sync(
-      all.filter(isOpenTodo).map((i) => ({ id: i.id, data: { ...items.get(i.id), start: null, date: null } })),
+      all.filter(isOpenTodo).map((i) => {
+        const { aiPlanned, aiPrev, ...rest } = items.get(i.id);
+        return { id: i.id, data: { ...rest, start: null, date: aiPrev?.date ?? null } };
+      }),
       all.filter((i) => kindOf(i) === "pause" && i.source === "plan").map((i) => i.id),
     );
     await setNote(cur, "", "regel");
@@ -1255,7 +1302,22 @@ export function initPlanner({ api, show, toast, openStudy }) {
         },
       });
       chat.push({ role: "assistant", content: res.reply || "Erledigt." });
-      if (res.changed) { await load(); await ensureTravel(); renderAll(); }
+      if (res.changed) {
+        const before = new Map(items);
+        await load();
+        const mark = [];
+        for (const [id, it] of items) {
+          if (it.source === "travel" || it.source === "review") continue;
+          const old = before.get(id);
+          if (!old) mark.push({ id, data: { ...it, aiNew: "claude" } });
+          else if (kindOf(it) === "todo" && (old.date !== it.date || old.start !== it.start) && it.start) {
+            mark.push({ id, data: { ...it, aiPlanned: "claude", aiPrev: { date: old.date ?? null, start: old.start ?? null } } });
+          }
+        }
+        if (mark.length) await sync(mark);
+        await ensureTravel();
+        renderAll();
+      }
     } catch (ex) {
       const msg = /eingerichtet/.test(ex.message)
         ? "Ich bin in der App noch nicht eingerichtet: In Supabase fehlt das Secret ANTHROPIC_API_KEY."
@@ -1288,6 +1350,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     $("#pl-grid").dataset.tab = t;
     $("#pl-tab-day").setAttribute("aria-selected", String(t === "day"));
     $("#pl-tab-todo").setAttribute("aria-selected", String(t === "todo"));
+    document.querySelectorAll(".pl-tabbar [data-bar]").forEach((b) => {
+      if (b.dataset.bar === "day" || b.dataset.bar === "todo") b.toggleAttribute("aria-current", b.dataset.bar === t);
+    });
   }
 
   async function open(date) {
@@ -1407,6 +1472,34 @@ export function initPlanner({ api, show, toast, openStudy }) {
   $("#pl-tab-day").addEventListener("click", () => setTab("day"));
   $("#pl-tab-todo").addEventListener("click", () => setTab("todo"));
   $("#today-card").addEventListener("click", () => open(today()));
+
+  document.querySelectorAll(".pl-tabbar [data-bar]").forEach((b) => b.addEventListener("click", () => {
+    const a = b.dataset.bar;
+    if (a === "day" || a === "todo") { setTab(a); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else if (a === "add") openSheet(null, { date: cur });
+    else if (a === "plan") { setTab("day"); planDay(); }
+    else if (a === "chat") openChat();
+  }));
+
+  // pull a bottom sheet down to close it (like on iOS)
+  function swipeToClose(panel, handle, close) {
+    let y0 = null;
+    handle.addEventListener("touchstart", (e) => { if (panel.scrollTop <= 0) y0 = e.touches[0].clientY; }, { passive: true });
+    handle.addEventListener("touchmove", (e) => {
+      if (y0 == null) return;
+      const dy = e.touches[0].clientY - y0;
+      if (dy > 0) panel.style.transform = `translateY(${dy}px)`;
+    }, { passive: true });
+    handle.addEventListener("touchend", (e) => {
+      if (y0 == null) return;
+      const dy = e.changedTouches[0].clientY - y0;
+      y0 = null;
+      panel.style.transform = "";
+      if (dy > 90) close();
+    });
+  }
+  swipeToClose(sheet, sheet, closeSheet);
+  swipeToClose($("#pl-chat"), $(".pl-chat-head"), () => { $("#pl-chat").hidden = true; });
 
   let touchX = null, touchY = null;
   const dayBox = $(".pl-day");

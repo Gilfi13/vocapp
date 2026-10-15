@@ -1120,3 +1120,56 @@ body.pl-dragging .pl-gap button { border-color: var(--blue); color: var(--blue);
 .pl-chat-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
 .pl-file { border: 1px solid var(--blue-line); background: var(--blue-soft); color: var(--blue); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pl-att { display: block; font-size: 12px; opacity: .85; margin-bottom: 4px; }
+
+/* ---------- Kalender: KI-Vorschläge ---------- */
+.pl-ttlrow { display: flex; align-items: flex-start; gap: 8px; width: 100%; }
+.pl-ttlrow .ttl { flex: 1; min-width: 0; }
+.pl-ai { flex: none; display: inline-flex; align-items: center; gap: 2px; background: #fbeee8; border: 1px solid #f2d3c5; border-radius: 999px; padding: 2px 2px 2px 6px; margin-top: 1px; }
+.pl-ai .logo { width: 16px; height: 16px; color: #d97757; display: grid; place-items: center; }
+.pl-ai .logo svg { width: 14px; height: 14px; }
+.pl-ai .x { width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; padding: 0; display: grid; place-items: center; }
+.pl-ai .x:hover { background: rgba(0, 0, 0, .06); color: var(--text); }
+.pl-list .pl-ai { margin-top: 0; }
+
+/* ---------- Kalender: Tab-Leiste unten (Handy) ---------- */
+.pl-tabbar { display: none; }
+#view-planner button, .pl-tabbar button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+@media (max-width: 880px) {
+  .pl-tabs, .pl-fab, .pl-ask, #pl-plan { display: none !important; }
+  .pl-planbtns { width: auto; }
+  .pl-page { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .pl-tabbar {
+    display: grid; grid-template-columns: repeat(5, 1fr); align-items: end;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+    padding: 6px max(8px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-right));
+    background: rgba(255, 255, 255, .86); -webkit-backdrop-filter: saturate(180%) blur(18px); backdrop-filter: saturate(180%) blur(18px);
+    border-top: 1px solid var(--blue-line);
+  }
+  .pl-tabbar button { position: relative; border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0 2px; color: var(--muted); font-size: 11px; font-weight: 700; min-height: 48px; }
+  .pl-tabbar button svg { width: 24px; height: 24px; }
+  .pl-tabbar button[aria-current] { color: var(--blue); }
+  .pl-tabbar .pl-bar-add { justify-self: center; width: 54px; height: 54px; min-height: 0; border-radius: 18px; background: var(--blue); color: var(--white); margin-bottom: 4px; box-shadow: 0 8px 20px rgba(31, 111, 235, .4); justify-content: center; padding: 0; }
+  .pl-tabbar .pl-bar-add svg { width: 26px; height: 26px; }
+  .pl-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--red); color: var(--white); font-size: 11px; line-height: 18px; text-align: center; }
+  .pl-badge:empty { display: none; }
+
+  /* week strip stays reachable while scrolling the day */
+  .pl-week { position: sticky; top: 0; z-index: 30; margin-left: -4px; margin-right: -4px; }
+  /* bigger tap targets */
+  .pl-chk { width: 32px; height: 32px; }
+  .pl-list li { padding: 10px 8px; }
+  .pl-gap button { padding: 10px 14px; }
+  .pl-sheet { max-height: calc(92dvh - env(safe-area-inset-top)); }
+  .pl-chat { height: calc(92dvh - env(safe-area-inset-top)); }
+  .pl-sheet, .pl-chat { transition: transform .15s ease-out; }
+}
+@media (prefers-reduced-motion: reduce) { .pl-sheet, .pl-chat { transition: none; } }
+
+/* toasts above the tab bar and sheets while the calendar is open */
+body:has(#view-planner:not([hidden])) .toast { z-index: 80; bottom: calc(40px + env(safe-area-inset-bottom)); }
+@media (max-width: 880px) {
+  body:has(#view-planner:not([hidden])) .toast { bottom: calc(92px + env(safe-area-inset-bottom)); }
+  .pl-planbtns { margin-left: auto; }
+}
+/* save/cancel always reachable in the sheet, even with the keyboard open */
+.pl-sheet .pl-actions { position: sticky; bottom: calc(-20px - env(safe-area-inset-bottom)); margin: 4px -20px calc(-20px - env(safe-area-inset-bottom)); padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, .94); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-top: 1px solid var(--blue-line); z-index: 2; }
