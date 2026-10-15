@@ -47,6 +47,8 @@ const DEFAULT_PREFS = {
   trainsOut: "", trainsBack: "", about: "",
   // Wochentage (0 = So … 6 = Sa), an denen hin bzw. zurück mit dem Zug gefahren wird
   trainOutDays: [1, 2, 3, 4, 5], trainBackDays: [1, 2, 3, 4, 5],
+  // Hinfahrt ohne Zug (z. B. mit dem Auto) an diesen Tagen, feste Zeiten
+  carOutDays: [], carDep: "07:00", carArr: "07:50", carTitle: "Fahrt nach Ulm",
 };
 const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
 
@@ -663,6 +665,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     };
     const daysOut = dayPicker("Hinfahrt mit dem Zug an", prefs.trainOutDays);
     const daysBack = dayPicker("Rückfahrt mit dem Zug an", prefs.trainBackDays);
+    const daysCar = dayPicker("Andere Hinfahrt (z. B. Auto) an", prefs.carOutDays || []);
+    const cDep = inputEl("time", prefs.carDep || "07:00", { step: 300 });
+    const cArr = inputEl("time", prefs.carArr || "07:50", { step: 300 });
+    const r6 = el("div", "pl-frow");
+    r6.append(field("Los um", cDep), field("Da um", cArr));
     const r5 = el("div", "pl-frow");
     r5.append(field(`Züge ${prefs.homeStation} → ${prefs.uniStation}`, tOut), field(`Züge ${prefs.uniStation} → ${prefs.homeStation}`, tBack));
     const about = el("textarea");
@@ -683,6 +690,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         travelOn: tOn.checked, walkStation: Number(tWalk.value), walkUni: Number(tUni.value), rideMin: Number(tRide.value),
         trainsOut: tOut.value.trim(), trainsBack: tBack.value.trim(), about: about.value.trim(),
         trainOutDays: daysOut.value(), trainBackDays: daysBack.value(),
+        carOutDays: daysCar.value(), carDep: cDep.value || "07:00", carArr: cArr.value || "07:50",
       };
       closeSheet();
       renderAll();
@@ -692,7 +700,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     };
     acts.append(el("span", "spacer"), cancel, ok);
     sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW),
-      travelHead, tOnWrap, r4, daysOut, daysBack, r5, travelHint, field("Über mich (für Claude)", about), acts);
+      travelHead, tOnWrap, r4, daysOut, daysBack, r5, daysCar, r6, travelHint, field("Über mich (für Claude)", about), acts);
     sheetBg.hidden = false;
   }
 
@@ -973,7 +981,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
       block("d", back.dep - walkU, walkU, `Zum Bahnhof ${uni}`, "🚶", ""),
       block("e", back.dep, back.arr - back.dep, `Zug ${uni} → ${home}`, "🚆", back.guess ? check : "aus deiner Zugliste"),
       block("f", back.arr, walkS, "Heimweg", "🏠", ""),
-    ].filter((b) => (/-[abc]$/.test(b.id) ? outOn : backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
+      block("g", toMin(prefs.carDep) ?? 420, (toMin(prefs.carArr) ?? 470) - (toMin(prefs.carDep) ?? 420), prefs.carTitle || "Fahrt nach Ulm", "🚗", ""),
+    ].filter((b) => !b.id.endsWith("-g") || (prefs.carOutDays || []).includes(dow)).filter((b) => (/-[abc]$/.test(b.id) ? outOn : /-g$/.test(b.id) || backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
   }
 
   // Keeps the travel blocks of the next days in line with lectures and settings.
