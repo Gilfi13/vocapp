@@ -50,7 +50,8 @@ const DEFAULT_PREFS = {
   // Hinfahrt ohne Zug (z. B. mit dem Auto) an diesen Tagen, feste Zeiten
   carOutDays: [], carDep: "07:00", carArr: "07:50", carTitle: "Fahrt nach Ulm",
   // Sport daheim: ab diesem Tag beim Planen vorschlagen (leer = aus)
-  sportFrom: "", sportPerWeek: 3, sportMin: 45,
+  sportFrom: "", sportPerWeek: 3, sportMin: 45, sportMade: [],
+  noTravel: [], // Tage ohne automatische Anfahrt
   // nach jeder Vorlesung eine Nacharbeiten-Aufgabe bis zur nächsten Vorlesung des Fachs
   reviewOn: true, reviewMin: 45, reviewMade: [],
 };
@@ -483,7 +484,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
   const sheet = $("#pl-sheet");
   function closeSheet() { sheetBg.hidden = true; sheet.textContent = ""; }
   sheetBg.addEventListener("click", (e) => { if (e.target === sheetBg) closeSheet(); });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sheetBg.hidden) closeSheet(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!sheetBg.hidden) closeSheet();
+    else if (!$("#pl-chat").hidden) $("#pl-chat").hidden = true;
+  });
 
   function field(label, input) {
     const f = el("label", "pl-field");
@@ -504,9 +509,33 @@ export function initPlanner({ api, show, toast, openStudy }) {
     return i;
   }
 
+  function openTravelSheet(it) {
+    sheet.textContent = "";
+    sheet.append(el("div", "pl-grab"), el("h3", null, `${emojiOf(it)} ${it.title}`));
+    sheet.append(el("p", "pl-hint", `${shortDate(it.date)} · ${it.start}–${fromMin(toMin(it.start) + durOf(it))}${it.notes ? ` · ${it.notes}` : ""}`));
+    sheet.append(el("p", "pl-hint", "Die Anfahrt rechnet die App selbst aus deinen Uni-Terminen und der Zugliste aus. Ändern kannst du sie in den Einstellungen."));
+    const acts = el("div", "pl-actions");
+    const off = el("button", "btn danger-ghost", "Diesen Tag ohne Anfahrt");
+    off.onclick = async () => {
+      closeSheet();
+      prefs.noTravel = [...new Set([...(prefs.noTravel || []), it.date])].filter((d) => d >= addDays(today(), -7));
+      await ensureTravel();
+      await savePrefs();
+      toast(`Am ${shortDate(it.date)} keine Anfahrt mehr`);
+    };
+    const set = el("button", "btn ghost", "Anfahrt einstellen");
+    set.onclick = openSettings;
+    const close = el("button", "btn primary", "OK");
+    close.onclick = closeSheet;
+    acts.append(off, el("span", "spacer"), set, close);
+    sheet.append(acts);
+    sheetBg.hidden = false;
+  }
+
   function openSheet(id, preset, occDate) {
     const it = id ? items.get(id) : null;
     if (id && !it) return;
+    if (it?.source === "travel") return openTravelSheet({ ...it, id });
     const st = it ? { ...it } : { title: "", kind: "todo", duration: 30, priority: 2, date: preset?.date || null, start: preset?.start || null, repeat: "none" };
     let kind = subKind(st);
     let color = COLORS.includes(st.color) ? st.color : KIND_DEF[kind].color;
@@ -547,14 +576,21 @@ export function initPlanner({ api, show, toast, openStudy }) {
       b.onclick = () => { dur = d; paint(); };
       durs.append(b);
     }
-    const date = inputEl("date", isSeries ? st.date : st.date || "");
+    const date = inputEl("date", isSeries && occDate ? occDate : st.date || "");
+    const due = inputEl("date", st.due || "");
+    const dueF = field("Erledigen bis", due);
+    const onlyBox = inputEl("checkbox", "");
+    onlyBox.checked = true;
+    const onlyWrap = el("label", "pl-check");
+    onlyWrap.append(onlyBox, el("span", null, `Nur am ${occDate ? shortDate(occDate) : ""} ändern (sonst die ganze Serie)`));
+    onlyWrap.hidden = !(isSeries && occDate);
     const start = inputEl("time", st.start || "", { step: 300 });
     const prio = selectEl([[1, "Wichtig"], [2, "Normal"], [3, "Kann warten"]], st.priority || 2);
     const rep = selectEl([["none", "Nie"], ["daily", "Jeden Tag"], ["weekdays", "Mo–Fr"], ["weekly", "Jede Woche"]], st.repeat || "none");
     const prioF = field("Wie wichtig?", prio);
     const repF = field("Wiederholen", rep);
     const row1 = el("div", "pl-frow");
-    row1.append(field("Tag", date), field("Uhrzeit", start));
+    row1.append(field("Tag", date), field("Uhrzeit", start), dueF);
     const row2 = el("div", "pl-frow");
     row2.append(prioF, repF);
 
@@ -590,7 +626,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     uniBox.checked = st.place === "uni";
     const uniWrap = el("label", "pl-check");
     uniWrap.append(uniBox, el("span", null, "An der Uni – Anfahrt mit dem Zug automatisch eintragen"));
-    sheet.append(seg, preview, hint, durWrap, row1, row2, uniWrap, colWrap, emoWrap, field("Notiz", noteIn));
+    sheet.append(seg, preview, hint, onlyWrap, durWrap, row1, row2, uniWrap, colWrap, emoWrap, field("Notiz", noteIn));
 
     const HINT = {
       todo: "Ohne Uhrzeit kommt es in den Eingang, und beim Planen bekommt es einen guten Platz.",
@@ -604,6 +640,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       prioF.hidden = !(kind === "todo" || kind === "pausetask");
       repF.hidden = !(kind === "termin" || kind === "pause");
       uniWrap.hidden = kind !== "termin";
+      dueF.hidden = !(kind === "todo" || kind === "pausetask");
       const e = emoji || guessEmoji(title.value, kind);
       cap.textContent = e;
       cap.style.setProperty("--c", colorVar(color));
@@ -657,6 +694,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         color,
         emoji: emoji || guessEmoji(t, kind),
         notes: noteIn.value.trim(),
+        due: kind === "todo" || kind === "pausetask" ? due.value || null : null,
         place: kind === "termin" && uniBox.checked ? "uni" : null,
         lecture: kind === "termin" && (uniBox.checked || !!it?.lecture),
         done: it ? !!it.done : false,
@@ -664,6 +702,15 @@ export function initPlanner({ api, show, toast, openStudy }) {
         createdAt: it?.createdAt || new Date().toISOString(),
       };
       closeSheet();
+      if (isSeries && occDate && onlyBox.checked) {
+        // one-off copy for this day, the series skips it
+        const { skip, until, ...single } = data;
+        return sync([
+          { id: newId(), data: { ...single, date: d || occDate, repeat: "none", source: "manual" } },
+          { id, data: { ...it, skip: [...new Set([...(it.skip || []), occDate])] } },
+        ]);
+      }
+      if (isSeries && occDate && d === occDate) data.date = it.date; // keep the series start
       save(id || newId(), data);
     });
     sheet.append(acts);
@@ -907,6 +954,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
   async function planDay() {
     if (planning) return;
     const date = cur;
+    if (date < today()) return toast("Vergangene Tage kann ich nicht mehr planen.");
     await ensureTravel();
     await ensureReviews();
     await ensureSport(date);
@@ -1043,6 +1091,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
   // From prefs.sportFrom on: suggest a home workout on days that have room, about sportPerWeek times a week.
   async function ensureSport(date) {
     if (!prefs.sportFrom || date < prefs.sportFrom) return;
+    if ((prefs.sportMade || []).includes(date)) return; // already suggested (maybe deleted on purpose)
     const all = [...items.values()];
     const has = (d) => all.some((it) => it.sport && it.date === d);
     if (has(date) || has(addDays(date, -1))) return;
@@ -1051,6 +1100,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
     for (let i = 0; i < 7; i++) if (has(addDays(monday, i))) week++;
     if (week >= (Number(prefs.sportPerWeek) || 3)) return;
     if (dayItems(date).some((i) => /spiel|training|party/i.test(i.title || ""))) return;
+    prefs.sportMade = [...(prefs.sportMade || []), date].slice(-60);
+    savePrefs();
     await save(newId(), {
       title: "Sport daheim", kind: "todo", forBreak: false, sport: true, duration: Number(prefs.sportMin) || 45,
       priority: 2, date, start: null, done: false, repeat: "none", color: "green", emoji: "🏃",
@@ -1069,6 +1120,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
 
   // The travel blocks a uni day needs: walk + train there, train + walk back.
   function travelPlan(date) {
+    if ((prefs.noTravel || []).includes(date)) return [];
     const lectures = dayItems(date).filter((i) => kindOf(i) === "termin" && i.place === "uni");
     if (!lectures.length) return [];
     const first = Math.min(...lectures.map((i) => toMin(i.start)));
@@ -1197,7 +1249,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       const res = await api("/planner/chat", {
         method: "POST",
         body: {
-          messages: chat.slice(-16).map(({ role, content }) => ({ role, content })),
+          messages: chat.filter((m) => !m.err).slice(-16).map(({ role, content }) => ({ role, content })),
           attachments: files.map(({ name, type, data }) => ({ name, type, data })),
           today: today(), now: fromMin(nowMinutes()), weekday: WD[n.getDay()], viewing: cur,
         },
@@ -1208,7 +1260,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       const msg = /eingerichtet/.test(ex.message)
         ? "Ich bin in der App noch nicht eingerichtet: In Supabase fehlt das Secret ANTHROPIC_API_KEY."
         : `Das hat nicht geklappt: ${ex.message}`;
-      chat.push({ role: "assistant", content: msg });
+      chat.push({ role: "assistant", content: msg, err: true });
     }
     saveChat();
     chatting = false;
@@ -1253,6 +1305,37 @@ export function initPlanner({ api, show, toast, openStudy }) {
     renderAll();
     await ensureTravel();
     ensureReviews();
+  }
+
+  // "morgen 14 Uhr Mathe lernen 1h" → {title, date, start, duration}
+  function parseQuick(text) {
+    let t = ` ${text.trim()} `;
+    let date = null, start = null, duration = 30;
+    const take = (re, fn) => { const m = t.match(re); if (m) { fn(m); t = t.replace(m[0], " "); } };
+    const t0 = today();
+    take(/\s(heute)\s/i, () => { date = t0; });
+    take(/\s(übermorgen)\s/i, () => { date = addDays(t0, 2); });
+    take(/\s(morgen)\s/i, () => { date = addDays(t0, 1); });
+    // short weekday only after "am" ("am do"), so words like "so" stay in the title
+    take(/\s(?:am\s(mo|di|mi|do|fr|sa|so)\.?|(?:am\s)?(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag))\s/i, (m) => {
+      const want = ["so", "mo", "di", "mi", "do", "fr", "sa"].indexOf((m[1] || m[2]).slice(0, 2).toLowerCase());
+      let d = addDays(t0, 1);
+      while (parseYmd(d).getDay() !== want) d = addDays(d, 1);
+      date = d;
+    });
+    take(/\s(?:am\s)?(\d{1,2})\.(\d{1,2})\.?\s/, (m) => {
+      const y = new Date().getFullYear();
+      let d = `${y}-${pad(m[2])}-${pad(m[1])}`;
+      if (d < t0) d = `${y + 1}-${pad(m[2])}-${pad(m[1])}`;
+      date = d;
+    });
+    take(/\s(?:um\s)?(\d{1,2})(?::(\d{2}))?\s?uhr\s/i, (m) => { start = `${pad(m[1])}:${pad(m[2] || 0)}`; });
+    take(/\s(?:um\s)?(\d{1,2}):(\d{2})\s/, (m) => { start = `${pad(m[1])}:${m[2]}`; });
+    take(/\s(\d+(?:[.,]5)?)\s?(h|std|stunden?)\s/i, (m) => { duration = Math.round(parseFloat(m[1].replace(",", ".")) * 60); });
+    take(/\s(\d{1,3})\s?(min|minuten)\s/i, (m) => { duration = Number(m[1]); });
+    if (start && !date) date = t0;
+    if (start && toMin(start) == null) start = null;
+    return { title: t.replace(/\s+/g, " ").trim(), date, start, duration: Math.max(5, Math.min(600, duration)) };
   }
 
   /* ---------- drag & drop (laptop) ---------- */
@@ -1309,10 +1392,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
   $("#pl-quick").addEventListener("submit", (e) => {
     e.preventDefault();
     const input = $("#pl-quick-title");
-    const title = input.value.trim();
-    if (!title) return;
+    const q = parseQuick(input.value);
+    if (!q.title) return;
     input.value = "";
-    save(newId(), { title, kind: "todo", forBreak: false, duration: 30, priority: 2, date: null, start: null, done: false, color: "coral", emoji: guessEmoji(title, "todo"), source: "manual", createdAt: new Date().toISOString() });
+    save(newId(), { kind: "todo", forBreak: false, priority: 2, done: false, color: "coral", emoji: guessEmoji(q.title, "todo"), source: "manual", createdAt: new Date().toISOString(), ...q });
+    if (q.date || q.start) toast(`„${q.title}“${q.date ? ` am ${shortDate(q.date)}` : ""}${q.start ? ` um ${q.start}` : ""} eingetragen`);
   });
   $("#pl-plan").addEventListener("click", planDay);
   $("#pl-clear").addEventListener("click", clearPlan);
@@ -1323,6 +1407,31 @@ export function initPlanner({ api, show, toast, openStudy }) {
   $("#pl-tab-day").addEventListener("click", () => setTab("day"));
   $("#pl-tab-todo").addEventListener("click", () => setTab("todo"));
   $("#today-card").addEventListener("click", () => open(today()));
+
+  let touchX = null, touchY = null;
+  const dayBox = $(".pl-day");
+  dayBox.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+  dayBox.addEventListener("touchend", (e) => {
+    if (touchX == null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    const dy = e.changedTouches[0].clientY - touchY;
+    touchX = null;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) go(addDays(cur, dx < 0 ? 1 : -1));
+  });
+  document.addEventListener("keydown", (e) => {
+    if ($("#view-planner").hidden || !sheetBg.hidden || !$("#pl-chat").hidden) return;
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)) return;
+    if (e.key === "ArrowLeft") go(addDays(cur, -1));
+    else if (e.key === "ArrowRight") go(addDays(cur, 1));
+    else if (e.key === "t") go(today());
+    else if (e.key === "n") { e.preventDefault(); openSheet(null, { date: cur }); }
+  });
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) return;
+    if (!$("#view-planner").hidden && sheetBg.hidden) {
+      try { await load(); renderAll(); await ensureTravel(); ensureReviews(); } catch { /* offline */ }
+    } else if (!$("#view-subjects").hidden) refreshTodayCard();
+  });
   setInterval(() => { if (!$("#view-planner").hidden && sheetBg.hidden && cur === today()) renderDay(); }, 60000);
 
   return { open, refreshTodayCard, studyDone };
