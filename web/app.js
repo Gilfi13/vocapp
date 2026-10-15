@@ -2,6 +2,7 @@ import { getStroke } from "./vendor/perfect-freehand.js";
 import { initGrammar } from "./grammar.js";
 import { initImport } from "./import.js";
 import { initSubjects } from "./subjects/index.js";
+import { initPlanner } from "./planner.js";
 
 // Backend: Supabase Edge Function (see supabase/functions/api)
 const API = "https://imhmxumgnemzrkfdzkle.supabase.co/functions/v1/api";
@@ -348,7 +349,9 @@ async function start() {
   $("#hello").textContent = `Hallo, ${me.username[0].toUpperCase()}${me.username.slice(1)}!`;
   $("#user-initial").textContent = me.username[0];
   $('[data-user="users"]').hidden = !me.is_admin;
+  if (location.hash === "#kalender") return planner.open();
   subjects.showSubjects();
+  planner.refreshTodayCard();
 }
 
 /* ---------- user menu ---------- */
@@ -1022,6 +1025,7 @@ async function finishLearning() {
   if (s.queue.length) return showCurrentCard();
 
   storage(SESSION_KEY(s.deckId), null);
+  planner.studyDone("vocab");
   $("#done-stats").textContent =
     `${plural(s.total, "Karte", "Karten")} gelernt` +
     (s.wrong ? ` · ${s.wrong}× nochmal` : " · alles beim ersten Mal richtig!");
@@ -1060,7 +1064,25 @@ $$("[data-home]").forEach((b) =>
 /* ------------------------------------------------------------------ */
 
 const subjects = initSubjects({ show, onEnglish: () => showHome() });
-const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible });
+const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible, onFinished: () => planner.studyDone("grammar") });
+// Lernaufgaben im Kalender öffnen den passenden Bereich von MyStudy
+const planner = initPlanner({
+  api,
+  show,
+  toast,
+  openStudy(link) {
+    if (link === "vocab") return openSetup(ALL_DECKS);
+    if (link === "grammar") return grammar.startTraining();
+    if (link?.startsWith("subject:")) return subjects.openSubjectById(link.slice(8));
+    showHome();
+  },
+});
+$$("[data-subjects]").forEach((b) =>
+  b.addEventListener("click", () => {
+    if (location.hash) history.replaceState(null, "", location.pathname);
+    planner.refreshTodayCard();
+  }),
+);
 const importer = initImport({ api, toast, plural, onDone: () => showHome() });
 
 if (storage(TOKEN_KEY)) start().catch(() => show("view-login"));

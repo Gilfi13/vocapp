@@ -38,7 +38,7 @@ export function isCorrectGap(input, answers) {
 
 /* ---------- module ---------- */
 
-export function initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible }) {
+export function initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible, onFinished }) {
   const $ = (sel) => document.querySelector(sel);
   let progress = new Map(); // item id → { box, due_at, ... }
 
@@ -315,6 +315,7 @@ export function initGrammar({ api, show, toast, setBar, plural, shuffle, isVisib
       `${quiz.firstTry.size} von ${total} beim ersten Versuch richtig` +
       (quiz.wrongOnce.size ? ` · ${quiz.wrongOnce.size} wiederholt` : " – perfekt!");
     show("view-quiz-done");
+    onFinished?.();
   }
 
   $("#quiz-check").addEventListener("click", checkGap);
@@ -339,5 +340,5 @@ export function initGrammar({ api, show, toast, setBar, plural, shuffle, isVisib
   $("#quiz-again").addEventListener("click", () => startQuiz(shuffle([...quiz.ids]), quiz.title));
   document.querySelectorAll("[data-grammar]").forEach((b) => b.addEventListener("click", showGrammar));
 
-  return { refreshHome };
+  return { refreshHome, startTraining };
 }

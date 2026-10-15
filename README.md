@@ -5,6 +5,8 @@ Lern-App fürs Studium. Die Startseite zeigt eine Kachel pro Fach:
 - **Englisch**: Vokabel-Karteikarten mit Handschrift (iPad + Apple Pencil) und Grammatik.
 - **Datenbanken**: SQL-Spickzettel für MySQL (`web/subjects/datenbanken.js`) mit Links zum Üben.
 - **Mathe, DEM, Programmieren, Management**: noch leer („Kommt bald“).
+- **Kalender** (`web/planner.js`): Tagesplaner mit Wochenleiste, Terminen (auch wiederkehrend),
+  To-dos, Pausen und Pausen-Tasks. Die Startseite zeigt eine „Heute“-Karte.
 
 Fächer stehen in `web/subjects/index.js`. Ein Fach mit `content` (Abschnitte als HTML + Links)
 bekommt automatisch eine Seite mit Sprung-Leiste.
@@ -82,3 +84,19 @@ Browser (iPad)                    Vercel                 Supabase
 | GET | `/stats` | `{today, streak}` (Vokabeln + Grammatik) |
 | GET | `/grammar` | eigener Lernstand pro Grammatik-Übung |
 | POST | `/grammar/review` | `{item, correct}` → neue Box & Fälligkeit |
+
+## Kalender
+
+- Einträge liegen in `planner_items` (ein JSON-Objekt pro Eintrag: Titel, Art `todo`/`termin`/`pause`,
+  Dauer, Tag, Uhrzeit, `repeat` = `none`/`daily`/`weekdays`/`weekly`, `skip` für ausgelassene Tage …),
+  Einstellungen in `planner_settings`, Claudes Notiz zum Plan in `planner_notes`.
+- API: `GET /planner`, `POST /planner/sync {upsert, remove}`, `PUT /planner/prefs`,
+  `PUT|DELETE /planner/notes/:tag`, `POST /planner/plan`.
+- **Tag planen** schickt Termine, To-dos und Einstellungen an Claude (`/planner/plan`). Dafür braucht
+  die Edge Function das Secret `ANTHROPIC_API_KEY`; ohne Secret verteilt die App nach einer einfachen
+  Regel (Wichtigkeit, Pause nach jedem Fokusblock, Pausen-Tasks in die Pausen).
+- **Verbindung zu MyStudy**: „Lernaufgaben holen“ legt Vokabelrunden (je 10 Wörter, die noch nicht sitzen)
+  und fälliges Grammatik-Training in den Eingang. Solche Aufgaben haben einen `link` (`vocab`, `grammar`,
+  `subject:<id>`), öffnen den passenden Bereich und haken sich nach einer fertigen Lernrunde selbst ab.
+- Am Handy: MyStudy über „Zum Home-Bildschirm“ hinzufügen; `/#kalender` öffnet direkt den Kalender
+  (auch als Verknüpfung im App-Manifest).

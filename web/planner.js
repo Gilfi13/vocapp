@@ -1,0 +1,909 @@
+// Kalender & Tagesplaner: Termine, To-dos, Pausen-Tasks und Lernaufgaben.
+// Einträge liegen auf dem Server (/planner); "Tag planen" fragt Claude
+// (/planner/plan) und verteilt sonst nach einer einfachen Regel.
+// Verbunden mit MyStudy: Lernaufgaben haben einen "link" (vocab, grammar,
+// subject:<id>), öffnen den passenden Bereich und haken sich nach einer
+// Lernrunde selbst ab.
+
+const pad = (n) => String(n).padStart(2, "0");
+const ymd = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parseYmd = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); };
+const toMin = (t) => { if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null; const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+const fromMin = (n) => (n >= 1440 ? "24:00" : `${pad(Math.floor(n / 60))}:${pad(n % 60)}`);
+const fmtDur = (m) => (m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`);
+const today = () => ymd(new Date());
+const nowMinutes = () => { const n = new Date(); return n.getHours() * 60 + n.getMinutes(); };
+
+const WD = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const MO = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+const DURS = [5, 10, 15, 30, 45, 60, 90, 120, 180];
+const COLORS = ["coral", "orange", "yellow", "green", "teal", "blue", "violet", "pink"];
+const EMOJIS = ["📅", "✏️", "💻", "📚", "🧠", "📞", "✉️", "👥", "🩺", "👓", "⚽", "🏃", "🧘", "🍽️", "☕", "🛒", "🧺", "🧹", "🚿", "😴", "🚆", "💶", "🎉", "🎵", "🎮", "🌱", "❤️", "⭐"];
+const GUESS = [
+  [/fußball|fussball|training|spiel:/i, "⚽"], [/sport|gym|laufen|joggen|fitness|rad/i, "🏃"], [/yoga|medit/i, "🧘"],
+  [/essen|mittag|frühstück|abendessen|kochen|lunch/i, "🍽️"], [/kaffee|pause/i, "☕"],
+  [/anruf|telefon|call|anrufen/i, "📞"], [/mail|brief/i, "✉️"], [/optiker|brille/i, "👓"],
+  [/arzt|zahn|physio|therap/i, "🩺"], [/einkauf|supermarkt|besorg/i, "🛒"],
+  [/wäsche/i, "🧺"], [/putz|aufräum|staubsaug|spül|küche/i, "🧹"],
+  [/vokabel|lern|schule|uni|hausaufgab|lesen|prüfung|klausur|grammatik/i, "📚"],
+  [/meeting|besprechung|team/i, "👥"], [/schlaf|nickerchen|ruhe/i, "😴"],
+  [/bahn|zug|fahrt|auto|bus|flug|losfahren/i, "🚆"], [/geld|bank|rechnung|steuer|überweis/i, "💶"],
+  [/geburtstag|party|freunde|feier/i, "🎉"], [/musik|gitarre|klavier/i, "🎵"],
+  [/arbeit|projekt|bewerbung|code|programm|sql|präsentation/i, "💻"],
+];
+const KIND_DEF = {
+  todo: { color: "coral", emoji: "✏️" },
+  pausetask: { color: "green", emoji: "🌱" },
+  termin: { color: "blue", emoji: "📅" },
+  pause: { color: "yellow", emoji: "☕" },
+};
+const REPEAT_LABEL = { daily: "täglich", weekdays: "Mo–Fr", weekly: "wöchentlich" };
+const DEFAULT_PREFS = { dayStart: "08:00", dayEnd: "21:00", focusMin: 90, breakMin: 15, lunch: "12:30", lunchMin: 45, wishes: "" };
+const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
+
+const guessEmoji = (title, k) => { for (const [re, e] of GUESS) if (re.test(title)) return e; return KIND_DEF[k].emoji; };
+const kindOf = (it) => it.kind || "todo";
+const subKind = (it) => (kindOf(it) === "todo" && it.forBreak ? "pausetask" : kindOf(it));
+const durOf = (it) => Math.max(5, Number(it.duration) || 30);
+const colorVar = (c) => `var(--pl-${c})`;
+const colorOf = (it) => colorVar(COLORS.includes(it.color) ? it.color : KIND_DEF[subKind(it)].color);
+const emojiOf = (it) => it.emoji || KIND_DEF[subKind(it)].emoji;
+const isOpenTodo = (it) => kindOf(it) === "todo" && !it.done;
+const newId = () => "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function occursOn(it, date) {
+  const r = it.repeat || "none";
+  if (r === "none" || kindOf(it) === "todo") return it.date === date;
+  if (!it.date || date < it.date) return false;
+  if (it.until && date > it.until) return false;
+  if (Array.isArray(it.skip) && it.skip.includes(date)) return false;
+  const dow = parseYmd(date).getDay();
+  if (r === "daily") return true;
+  if (r === "weekdays") return dow >= 1 && dow <= 5;
+  if (r === "weekly") return dow === parseYmd(it.date).getDay();
+  return it.date === date;
+}
+
+export function initPlanner({ api, show, toast, openStudy }) {
+  const $ = (sel) => document.querySelector(sel);
+  const items = new Map();
+  let prefs = { ...DEFAULT_PREFS };
+  let notes = {};
+  let cur = today();
+  let loaded = false;
+  let tab = "day";
+
+  /* ---------- data ---------- */
+
+  async function load() {
+    const data = await api("/planner");
+    items.clear();
+    for (const it of data.items) { const { id, ...rest } = it; items.set(id, rest); }
+    prefs = { ...DEFAULT_PREFS, ...(data.prefs || {}) };
+    notes = data.notes || {};
+    loaded = true;
+  }
+
+  // Save and delete entries in one request; the screen updates right away.
+  async function sync(upsert = [], remove = []) {
+    for (const { id, data } of upsert) items.set(id, data);
+    for (const id of remove) items.delete(id);
+    renderAll();
+    try {
+      await api("/planner/sync", { method: "POST", body: { upsert, remove } });
+    } catch (ex) {
+      toast(`Nicht gespeichert: ${ex.message}`);
+      await load().catch(() => {});
+      renderAll();
+    }
+  }
+  const save = (id, data) => sync([{ id, data }]);
+  const patch = (id, data) => { const old = items.get(id); return old ? save(id, { ...old, ...data }) : null; };
+  const patchMany = (list) => sync(list.filter(([id]) => items.has(id)).map(([id, data]) => ({ id, data: { ...items.get(id), ...data } })));
+
+  async function setNote(date, text, by) {
+    if (text) notes[date] = { text, by }; else delete notes[date];
+    renderNote();
+    try {
+      if (text) await api(`/planner/notes/${date}`, { method: "PUT", body: { text, by } });
+      else await api(`/planner/notes/${date}`, { method: "DELETE" });
+    } catch { /* the note is only a nice-to-have */ }
+  }
+
+  function dayItems(date) {
+    const out = [];
+    for (const [id, it] of items) if (toMin(it.start) != null && occursOn(it, date)) out.push({ ...it, id, date });
+    return out.sort((a, b) => toMin(a.start) - toMin(b.start) || durOf(b) - durOf(a));
+  }
+  function inboxItems(date) {
+    const t = today();
+    return [...items.entries()].map(([id, it]) => ({ ...it, id }))
+      .filter((it) => isOpenTodo(it) && (toMin(it.start) == null ? (!it.date || it.date <= date) : it.date < t))
+      .sort((a, b) => (a.priority || 2) - (b.priority || 2) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  }
+
+  /* ---------- week strip ---------- */
+
+  function renderWeek() {
+    const w = $("#pl-week");
+    w.textContent = "";
+    const monday = addDays(cur, -((parseYmd(cur).getDay() + 6) % 7));
+    const prev = el("button", "pl-nav", "‹");
+    prev.setAttribute("aria-label", "Vorherige Woche");
+    prev.onclick = () => go(addDays(cur, -7));
+    w.append(prev);
+    const t = today();
+    for (let i = 0; i < 7; i++) {
+      const ds = addDays(monday, i);
+      const dd = parseYmd(ds);
+      const b = el("button", "pl-wd" + (ds === cur ? " sel" : "") + (ds === t ? " today" : ""));
+      b.setAttribute("aria-label", `${WD[dd.getDay()]} ${dd.getDate()}. ${MO[dd.getMonth()]}`);
+      b.append(el("span", "n", WDS[dd.getDay()]), el("span", "d", dd.getDate()));
+      const dots = el("span", "dots");
+      dayItems(ds).filter((x) => kindOf(x) !== "pause").slice(0, 4).forEach((x) => {
+        const i2 = el("i");
+        i2.style.setProperty("--c", colorOf(x));
+        dots.append(i2);
+      });
+      b.append(dots);
+      b.onclick = () => go(ds);
+      w.append(b);
+    }
+    const next = el("button", "pl-nav", "›");
+    next.setAttribute("aria-label", "Nächste Woche");
+    next.onclick = () => go(addDays(cur, 7));
+    w.append(next);
+  }
+
+  /* ---------- day ---------- */
+
+  function freeMinutes(list) {
+    const s = toMin(prefs.dayStart) ?? 480;
+    const e = toMin(prefs.dayEnd) ?? 1260;
+    let cursor = cur === today() ? Math.max(s, nowMinutes()) : s;
+    let free = 0;
+    for (const it of list) {
+      if (it.forBreak) continue;
+      const a = toMin(it.start);
+      if (a > cursor) free += Math.min(a, e) - cursor;
+      cursor = Math.max(cursor, a + durOf(it));
+      if (cursor >= e) break;
+    }
+    if (e > cursor) free += e - cursor;
+    return Math.max(0, free);
+  }
+
+  function renderHead(list) {
+    const d = parseYmd(cur);
+    const t = today();
+    const rel = cur === t ? "Heute" : cur === addDays(t, 1) ? "Morgen" : cur === addDays(t, -1) ? "Gestern" : null;
+    $("#pl-day-title").textContent = `${rel || WD[d.getDay()]}, ${d.getDate()}. ${MO[d.getMonth()]}`;
+    const sub = $("#pl-day-sub");
+    sub.textContent = "";
+    const todos = list.filter((i) => kindOf(i) === "todo");
+    const termine = list.filter((i) => kindOf(i) === "termin").length;
+    const add = (val, label) => { const s = el("span"); s.append(el("b", null, val), ` ${label}`); sub.append(s); };
+    if (rel) sub.append(el("span", null, WD[d.getDay()]));
+    add(todos.length ? `${todos.filter((i) => i.done).length}/${todos.length}` : "0", todos.length === 1 ? "To-do" : "To-dos");
+    add(String(termine), termine === 1 ? "Termin" : "Termine");
+    const free = freeMinutes(list);
+    if (free > 0) add(fmtDur(free), "frei");
+  }
+
+  function renderDay() {
+    const box = $("#pl-rows");
+    box.textContent = "";
+    const list = dayItems(cur);
+    renderHead(list);
+
+    // break tasks are shown inside the break they fall into
+    const pauses = list.filter((i) => kindOf(i) === "pause");
+    const inPause = new Map();
+    const main = [];
+    for (const it of list) {
+      if (kindOf(it) === "todo" && it.forBreak) {
+        const s = toMin(it.start);
+        const p = pauses.find((p) => s >= toMin(p.start) && s < toMin(p.start) + durOf(p));
+        if (p) {
+          if (!inPause.has(p.id)) inPause.set(p.id, []);
+          inPause.get(p.id).push(it);
+          continue;
+        }
+      }
+      main.push(it);
+    }
+
+    const dayS = toMin(prefs.dayStart) ?? 480;
+    const dayE = toMin(prefs.dayEnd) ?? 1260;
+    const nowM = nowMinutes();
+    let nowPlaced = cur !== today();
+    const putNow = (before) => {
+      if (!nowPlaced && nowM < before) { nowPlaced = true; box.append(nowRow(nowM)); }
+    };
+    const gapUntil = (from, to) => {
+      if (!nowPlaced && nowM >= from && nowM < to) { putNow(to); box.append(gapRow(Math.max(from, nowM), to)); }
+      else { putNow(from); box.append(gapRow(from, to)); }
+    };
+    let cursor = Math.min(dayS, ...main.map((i) => toMin(i.start)));
+    let prevEnd = -1;
+    for (const it of main) {
+      const s = toMin(it.start);
+      if (s - cursor >= 10) gapUntil(cursor, s);
+      putNow(s);
+      box.append(itemRow(it, inPause.get(it.id) || [], s < prevEnd));
+      prevEnd = Math.max(prevEnd, s + durOf(it));
+      cursor = Math.max(cursor, s + durOf(it));
+    }
+    if (dayE - cursor >= 10) gapUntil(cursor, dayE);
+    putNow(1441);
+
+    if (!main.length) {
+      const em = el("div", "pl-empty");
+      em.append(el("strong", null, "Der Tag ist noch frei"),
+        "Trag To-dos in den Eingang ein und tippe auf „Tag planen“. Termine legst du mit dem Plus an.");
+      box.prepend(em);
+    }
+  }
+
+  function nowRow(m) {
+    const r = el("div", "pl-now");
+    r.append(el("span", "tm", fromMin(m)), el("span", "ln"));
+    return r;
+  }
+
+  function gapRow(a, b) {
+    const r = el("div", "pl-gap");
+    r.append(el("span", "tm", fromMin(a)), el("span", "dotc"));
+    const btn = el("button", null, `+ ${fmtDur(b - a)} frei`);
+    btn.setAttribute("aria-label", `Etwas um ${fromMin(a)} eintragen`);
+    btn.onclick = () => openSheet(null, { date: cur, start: fromMin(Math.ceil(a / 5) * 5) });
+    r.append(btn);
+    return r;
+  }
+
+  function itemRow(it, minis, overlap) {
+    const k = kindOf(it);
+    const s = toMin(it.start);
+    const e = s + durOf(it);
+    const r = el("div", "pl-it" + (it.done ? " done" : ""));
+    r.style.setProperty("--c", colorOf(it));
+    const tm = el("div", "tm", fromMin(s));
+    tm.append(el("span", null, fromMin(e)));
+    const cap = el("div", "pl-cap", emojiOf(it));
+    cap.style.height = `${Math.max(56, Math.min(200, durOf(it) * 1.1)) + minis.length * 22}px`;
+    const card = el("div", "card");
+    const ttl = el("button", "ttl", it.title || (k === "pause" ? "Pause" : "Ohne Titel"));
+    ttl.onclick = () => openSheet(it.id, null, it.date);
+    card.append(ttl);
+    const meta = el("span", "meta");
+    meta.append(fmtDur(durOf(it)));
+    if (k === "termin") meta.append(el("span", "pl-pill", "Termin"));
+    if (k === "pause") meta.append(el("span", "pl-pill", "Pause"));
+    if (REPEAT_LABEL[it.repeat]) meta.append(el("span", "pl-pill", REPEAT_LABEL[it.repeat]));
+    if (it.notes) meta.append(el("span", "note", it.notes));
+    if (overlap) meta.append(el("span", "pl-pill warn", "überschneidet sich"));
+    card.append(meta);
+    if (it.link && !it.done) card.append(studyButton(it));
+    if (minis.length) {
+      const w = el("div", "pl-minis");
+      for (const m of minis) {
+        const c = el("div", "pl-mini" + (m.done ? " done" : ""));
+        c.style.setProperty("--c", colorOf(m));
+        const label = el("button", "lbl", `${emojiOf(m)} ${m.title} · ${durOf(m)} min`);
+        label.onclick = () => openSheet(m.id);
+        c.append(checkBtn(m), label);
+        if (m.link && !m.done) c.append(studyButton(m, true));
+        w.append(c);
+      }
+      card.append(w);
+    }
+    r.append(tm, cap, card, k === "todo" ? checkBtn(it) : el("span"));
+    return r;
+  }
+
+  function studyButton(it, small) {
+    const b = el("button", "pl-go" + (small ? " small" : ""), small ? "Los" : `${LINK_LABEL[it.link] || "Öffnen"} →`);
+    b.onclick = (e) => { e.stopPropagation(); openStudy(it.link); };
+    return b;
+  }
+
+  function checkBtn(it) {
+    const c = el("button", "pl-chk" + (it.done ? " on" : ""));
+    c.setAttribute("aria-label", it.done ? "Als offen markieren" : "Erledigt");
+    c.onclick = (e) => { e.stopPropagation(); patch(it.id, { done: !it.done }); };
+    return c;
+  }
+
+  function renderNote() {
+    const box = $("#pl-note");
+    box.textContent = "";
+    const n = notes[cur];
+    if (!n?.text) return;
+    const d = el("div", "pl-notecard");
+    const txt = el("div");
+    txt.append(el("span", "who", n.by === "claude" ? "Claude zu deinem Plan" : "Zum Plan"), n.text);
+    d.append(el("span", "av", n.by === "claude" ? "C" : "i"), txt);
+    box.append(d);
+  }
+
+  function renderInbox() {
+    const box = $("#pl-inbox");
+    box.textContent = "";
+    const list = inboxItems(cur);
+    $("#pl-inbox-count").textContent = list.length ? `${list.length} offen` : "";
+    $("#pl-tab-count").textContent = list.length ? `· ${list.length}` : "";
+    if (!list.length) {
+      box.append(el("p", "pl-empty small", "Alles eingeplant. Neue To-dos warten hier, bis sie einen Platz im Tag bekommen."));
+      return;
+    }
+    for (const [label, arr] of [["To-dos", list.filter((i) => !i.forBreak)], ["Für die Pause", list.filter((i) => i.forBreak)]]) {
+      if (!arr.length) continue;
+      box.append(el("div", "pl-sub", label));
+      const ul = el("ul", "pl-list");
+      for (const it of arr) {
+        const li = el("li");
+        li.style.setProperty("--c", colorOf(it));
+        const tt = el("button", "ttl", it.title);
+        tt.onclick = () => openSheet(it.id);
+        const m = el("span", "m");
+        if (toMin(it.start) != null && it.date < today()) { m.append(el("span", "late", "verpasst"), el("br")); }
+        else if (it.priority === 1) { m.append(el("span", "late", "wichtig"), el("br")); }
+        m.append(fmtDur(durOf(it)));
+        li.append(checkBtn(it), el("span", "e", emojiOf(it)), tt, m);
+        if (it.link) li.append(studyButton(it, true));
+        ul.append(li);
+      }
+      box.append(ul);
+    }
+  }
+
+  function renderAll() {
+    if (!loaded || $("#view-planner").hidden) return;
+    renderWeek();
+    renderDay();
+    renderInbox();
+    renderNote();
+  }
+
+  /* ---------- "Heute" card on the start page ---------- */
+
+  async function refreshTodayCard() {
+    const box = $("#today-card");
+    if (!box) return;
+    try {
+      await load();
+    } catch {
+      box.hidden = true;
+      return;
+    }
+    const t = today();
+    const nowM = nowMinutes();
+    const list = dayItems(t).filter((i) => !i.done && toMin(i.start) + durOf(i) > nowM && kindOf(i) !== "pause");
+    const open = inboxItems(t).length;
+    box.hidden = false;
+    const ul = $("#today-list");
+    ul.textContent = "";
+    if (!list.length) ul.append(el("li", "muted", "Heute steht nichts mehr an."));
+    for (const it of list.slice(0, 3)) {
+      const li = el("li");
+      li.style.setProperty("--c", colorOf(it));
+      li.append(el("span", "t", it.start), el("span", "e", emojiOf(it)), el("span", "n", it.title));
+      ul.append(li);
+    }
+    $("#today-more").textContent = open ? `${open} ${open === 1 ? "To-do wartet" : "To-dos warten"} im Eingang` : "";
+  }
+
+  /* ---------- add / edit sheet ---------- */
+
+  const sheetBg = $("#pl-sheet-bg");
+  const sheet = $("#pl-sheet");
+  function closeSheet() { sheetBg.hidden = true; sheet.textContent = ""; }
+  sheetBg.addEventListener("click", (e) => { if (e.target === sheetBg) closeSheet(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !sheetBg.hidden) closeSheet(); });
+
+  function field(label, input) {
+    const f = el("label", "pl-field");
+    f.append(el("span", "lbl", label), input);
+    return f;
+  }
+  function selectEl(options, value) {
+    const s = el("select");
+    for (const [v, t] of options) { const o = el("option", null, t); o.value = v; s.append(o); }
+    s.value = String(value);
+    return s;
+  }
+  function inputEl(type, value, attrs = {}) {
+    const i = el("input");
+    i.type = type;
+    i.value = value ?? "";
+    Object.assign(i, attrs);
+    return i;
+  }
+
+  function openSheet(id, preset, occDate) {
+    const it = id ? items.get(id) : null;
+    if (id && !it) return;
+    const st = it ? { ...it } : { title: "", kind: "todo", duration: 30, priority: 2, date: preset?.date || null, start: preset?.start || null, repeat: "none" };
+    let kind = subKind(st);
+    let color = COLORS.includes(st.color) ? st.color : KIND_DEF[kind].color;
+    let colorTouched = !!st.color;
+    let emoji = st.emoji || null;
+    let dur = durOf(st);
+    const isSeries = !!it && REPEAT_LABEL[it.repeat];
+
+    sheet.textContent = "";
+    sheet.append(el("div", "pl-grab"), el("h3", null, it ? "Bearbeiten" : "Neuer Eintrag"));
+
+    const seg = el("div", "pl-seg");
+    const kinds = [["todo", "To-do"], ["termin", "Termin"], ["pausetask", "Pausen-Task"], ["pause", "Pause"]];
+    for (const [k, label] of kinds) {
+      const b = el("button", null, label);
+      b.type = "button";
+      b.dataset.k = k;
+      b.onclick = () => {
+        kind = k;
+        if (!colorTouched) color = KIND_DEF[k].color;
+        if (!it) dur = { todo: 30, termin: 60, pausetask: 10, pause: 15 }[k];
+        paint();
+      };
+      seg.append(b);
+    }
+
+    const cap = el("div", "pl-cap");
+    const title = inputEl("text", st.title, { placeholder: "Was?" });
+    const preview = el("div", "pl-preview");
+    preview.append(cap, field("Was?", title));
+    const hint = el("p", "pl-hint");
+
+    const durs = el("div", "pl-durs");
+    for (const d of DURS.includes(dur) ? DURS : [...DURS, dur].sort((a, b) => a - b)) {
+      const b = el("button", null, d >= 60 ? `${String(d / 60).replace(".", ",")} h` : `${d} min`);
+      b.type = "button";
+      b.dataset.d = d;
+      b.onclick = () => { dur = d; paint(); };
+      durs.append(b);
+    }
+    const date = inputEl("date", isSeries ? st.date : st.date || "");
+    const start = inputEl("time", st.start || "", { step: 300 });
+    const prio = selectEl([[1, "Wichtig"], [2, "Normal"], [3, "Kann warten"]], st.priority || 2);
+    const rep = selectEl([["none", "Nie"], ["daily", "Jeden Tag"], ["weekdays", "Mo–Fr"], ["weekly", "Jede Woche"]], st.repeat || "none");
+    const prioF = field("Wie wichtig?", prio);
+    const repF = field("Wiederholen", rep);
+    const row1 = el("div", "pl-frow");
+    row1.append(field("Tag", date), field("Uhrzeit", start));
+    const row2 = el("div", "pl-frow");
+    row2.append(prioF, repF);
+
+    const swatches = el("div", "pl-swatches");
+    for (const c of COLORS) {
+      const b = el("button");
+      b.type = "button";
+      b.dataset.c = c;
+      b.style.setProperty("--c", colorVar(c));
+      b.setAttribute("aria-label", `Farbe ${c}`);
+      b.onclick = () => { color = c; colorTouched = true; paint(); };
+      swatches.append(b);
+    }
+    const emojis = el("div", "pl-emojis");
+    for (const e of EMOJIS) {
+      const b = el("button", null, e);
+      b.type = "button";
+      b.onclick = () => { emoji = e; paint(); };
+      emojis.append(b);
+    }
+    const noteIn = el("textarea");
+    noteIn.value = st.notes || "";
+    noteIn.placeholder = "Optional, z. B. Raum oder Adresse";
+
+    const durWrap = el("div", "pl-field");
+    durWrap.append(el("span", "lbl", "Dauer"), durs);
+    const colWrap = el("div", "pl-field");
+    colWrap.append(el("span", "lbl", "Farbe"), swatches);
+    const emoWrap = el("div", "pl-field");
+    emoWrap.append(el("span", "lbl", "Symbol"), emojis);
+
+    sheet.append(seg, preview, hint, durWrap, row1, row2, colWrap, emoWrap, field("Notiz", noteIn));
+
+    const HINT = {
+      todo: "Ohne Uhrzeit kommt es in den Eingang, und beim Planen bekommt es einen guten Platz.",
+      termin: "Fester Termin, z. B. Vorlesung oder Training. Bleibt beim Planen frei. Braucht eine Uhrzeit.",
+      pausetask: "Kleinkram für zwischendurch, z. B. eine Vokabelrunde. Kommt beim Planen in deine Pausen.",
+      pause: "Feste Pause, z. B. Mittag. Pausen-Tasks können hinein.",
+    };
+    function paint() {
+      seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === kind)));
+      hint.textContent = HINT[kind];
+      prioF.hidden = !(kind === "todo" || kind === "pausetask");
+      repF.hidden = !(kind === "termin" || kind === "pause");
+      const e = emoji || guessEmoji(title.value, kind);
+      cap.textContent = e;
+      cap.style.setProperty("--c", colorVar(color));
+      swatches.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.c === color)));
+      emojis.querySelectorAll("button").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.textContent === e));
+        b.style.setProperty("--c", colorVar(color));
+      });
+      durs.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.d === dur)));
+    }
+    title.addEventListener("input", () => { if (!emoji) paint(); });
+
+    const acts = el("div", "pl-actions");
+    const btn = (label, cls, fn) => { const b = el("button", `btn ${cls}`, label); b.type = "button"; b.onclick = fn; acts.append(b); return b; };
+    if (it) {
+      if (isSeries && occDate) {
+        let armed1 = false;
+        const b1 = btn("Nur diesen Tag löschen", "danger-ghost", () => {
+          if (!armed1) { armed1 = true; b1.textContent = "Sicher?"; return; }
+          closeSheet();
+          patch(id, { skip: [...(it.skip || []), occDate] });
+        });
+      }
+      let armed = false;
+      const del = btn(isSeries ? "Serie löschen" : "Löschen", "danger-ghost", () => {
+        if (!armed) { armed = true; del.textContent = "Wirklich löschen?"; return; }
+        closeSheet();
+        sync([], [id]);
+      });
+      if (kindOf(it) === "todo" && it.start) btn("In den Eingang", "ghost", () => { closeSheet(); patch(id, { start: null, date: null }); });
+    }
+    acts.append(el("span", "spacer"));
+    btn("Abbrechen", "ghost", closeSheet);
+    btn(it ? "Speichern" : "Hinzufügen", "primary", () => {
+      const t = title.value.trim();
+      if (!t && kind !== "pause") { title.focus(); title.placeholder = "Bitte einen Titel eingeben"; return; }
+      const s = start.value || null;
+      if ((kind === "termin" || kind === "pause") && !s) { start.focus(); return; }
+      let d = date.value || null;
+      if (s && !d) d = cur;
+      const data = {
+        ...(it || {}),
+        title: t || "Pause",
+        kind: kind === "pausetask" ? "todo" : kind,
+        forBreak: kind === "pausetask",
+        duration: dur,
+        priority: Number(prio.value),
+        date: d,
+        start: s,
+        repeat: kind === "termin" || kind === "pause" ? rep.value : "none",
+        color,
+        emoji: emoji || guessEmoji(t, kind),
+        notes: noteIn.value.trim(),
+        done: it ? !!it.done : false,
+        source: it?.source === "plan" && kind !== "pause" ? "manual" : it?.source || "manual",
+        createdAt: it?.createdAt || new Date().toISOString(),
+      };
+      closeSheet();
+      save(id || newId(), data);
+    });
+    sheet.append(acts);
+    paint();
+    sheetBg.hidden = false;
+    if (!it) title.focus();
+  }
+
+  function openSettings() {
+    sheet.textContent = "";
+    sheet.append(el("div", "pl-grab"), el("h3", null, "Einstellungen"));
+    const sS = inputEl("time", prefs.dayStart, { step: 300 });
+    const sE = inputEl("time", prefs.dayEnd, { step: 300 });
+    const sF = selectEl([[45, "45 min"], [60, "1 h"], [75, "1 h 15"], [90, "1 h 30"], [120, "2 h"]], prefs.focusMin);
+    const sB = selectEl([[5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [30, "30 min"]], prefs.breakMin);
+    const sL = inputEl("time", prefs.lunch, { step: 300 });
+    const sLM = selectEl([[0, "kein Mittag"], [30, "30 min"], [45, "45 min"], [60, "1 h"]], prefs.lunchMin);
+    const sW = el("textarea");
+    sW.value = prefs.wishes || "";
+    sW.placeholder = "z. B. Schweres am Vormittag. Nach 18 Uhr nur Leichtes. Vokabeln lieber in kurzen Runden.";
+    const r1 = el("div", "pl-frow"); r1.append(field("Mein Tag beginnt", sS), field("und endet", sE));
+    const r2 = el("div", "pl-frow"); r2.append(field("Pause nach", sF), field("Pausenlänge", sB));
+    const r3 = el("div", "pl-frow"); r3.append(field("Mittag um", sL), field("Mittag dauert", sLM));
+    const acts = el("div", "pl-actions");
+    const cancel = el("button", "btn ghost", "Abbrechen");
+    cancel.onclick = closeSheet;
+    const ok = el("button", "btn primary", "Speichern");
+    ok.onclick = async () => {
+      prefs = {
+        ...prefs,
+        dayStart: sS.value || "08:00", dayEnd: sE.value || "21:00",
+        focusMin: Number(sF.value), breakMin: Number(sB.value),
+        lunch: sL.value || "12:30", lunchMin: Number(sLM.value), wishes: sW.value.trim(),
+      };
+      closeSheet();
+      renderAll();
+      try { await api("/planner/prefs", { method: "PUT", body: { prefs } }); }
+      catch (ex) { toast(`Nicht gespeichert: ${ex.message}`); }
+    };
+    acts.append(el("span", "spacer"), cancel, ok);
+    sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW), acts);
+    sheetBg.hidden = false;
+  }
+
+  /* ---------- planning ---------- */
+
+  function planContext(date) {
+    const all = dayItems(date);
+    const nowMin = date === today() ? Math.ceil(nowMinutes() / 5) * 5 : null;
+    const fixed = all.filter((i) =>
+      kindOf(i) === "termin" ||
+      (kindOf(i) === "pause" && i.source !== "plan") ||
+      (kindOf(i) === "todo" && (i.done || (nowMin != null && toMin(i.start) < nowMin))));
+    const fixedIds = new Set(fixed.map((i) => i.id));
+    const seen = new Set();
+    const todos = [
+      ...all.filter((i) => isOpenTodo(i) && !fixedIds.has(i.id)),
+      ...inboxItems(date).filter((i) => !(i.date === date && toMin(i.start) != null)),
+    ].filter((i) => !seen.has(i.id) && seen.add(i.id));
+    const oldPlanPauses = all.filter((i) => kindOf(i) === "pause" && i.source === "plan");
+    return { fixed, todos, oldPlanPauses, nowMin };
+  }
+
+  // Simple fallback: by priority into free slots, a break after every focus block,
+  // break tasks into the breaks.
+  function rulePlan(ctx) {
+    const dayS = Math.max(toMin(prefs.dayStart) ?? 480, ctx.nowMin ?? 0);
+    const dayE = toMin(prefs.dayEnd) ?? 1260;
+    const busy = ctx.fixed.filter((i) => !i.forBreak).map((i) => [toMin(i.start), toMin(i.start) + durOf(i)]);
+    const pauses = [];
+    const lunchS = toMin(prefs.lunch);
+    if (prefs.lunchMin > 0 && lunchS != null && lunchS >= dayS && lunchS + prefs.lunchMin <= dayE &&
+      !busy.some(([s, e]) => s < lunchS + prefs.lunchMin && e > lunchS) &&
+      !ctx.fixed.some((i) => kindOf(i) === "pause" && Math.abs(toMin(i.start) - lunchS) < 90)) {
+      pauses.push({ start: lunchS, duration: prefs.lunchMin, title: "Mittagspause" });
+      busy.push([lunchS, lunchS + prefs.lunchMin]);
+    }
+    const isBusy = (s, e) => busy.some(([a, b]) => a < e && b > s);
+    const nextFree = (t) => {
+      let moved = true;
+      while (moved) { moved = false; for (const [a, b] of busy) if (t >= a && t < b) { t = b; moved = true; } }
+      return t;
+    };
+    const queue = ctx.todos.filter((i) => !i.forBreak);
+    const small = ctx.todos.filter((i) => i.forBreak);
+    const schedule = [];
+    let t = dayS;
+    let streak = 0;
+    while (queue.length && t < dayE) {
+      t = nextFree(t);
+      if (streak >= prefs.focusMin) {
+        if (!isBusy(t, t + prefs.breakMin) && t + prefs.breakMin <= dayE) {
+          pauses.push({ start: t, duration: prefs.breakMin, title: "Pause" });
+          busy.push([t, t + prefs.breakMin]);
+          t += prefs.breakMin;
+        }
+        streak = 0;
+        continue;
+      }
+      const idx = queue.findIndex((i) => t + durOf(i) <= dayE && !isBusy(t, t + durOf(i)) && streak + durOf(i) <= Math.max(prefs.focusMin, durOf(i)));
+      if (idx === -1) {
+        const nb = busy.filter(([a]) => a > t).sort((x, y) => x[0] - y[0])[0];
+        if (!nb) { if (streak > 0) { streak = prefs.focusMin; continue; } break; }
+        t = nb[1];
+        streak = 0;
+        continue;
+      }
+      const it = queue.splice(idx, 1)[0];
+      schedule.push({ id: it.id, start: t });
+      busy.push([t, t + durOf(it)]);
+      t += durOf(it);
+      streak += durOf(it);
+    }
+    const slots = [
+      ...pauses.map((p) => ({ s: p.start, left: p.duration })),
+      ...ctx.fixed.filter((i) => kindOf(i) === "pause").map((i) => ({ s: toMin(i.start), left: durOf(i) })),
+    ].filter((p) => p.s >= dayS).sort((a, b) => a.s - b.s);
+    const used = new Map();
+    for (const it of small) {
+      const p = slots.find((p) => p.left >= durOf(it));
+      if (!p) continue;
+      const off = used.get(p) || 0;
+      schedule.push({ id: it.id, start: p.s + off });
+      used.set(p, off + durOf(it));
+      p.left -= durOf(it);
+    }
+    return { schedule, pauses, note: `Nach Wichtigkeit verteilt, mit einer Pause nach je ${fmtDur(prefs.focusMin)}.` };
+  }
+
+  async function claudePlan(date, ctx) {
+    const d = parseYmd(date);
+    const data = {
+      datum: date,
+      wochentag: WD[d.getDay()],
+      jetzt: ctx.nowMin != null ? fromMin(ctx.nowMin) : null,
+      einstellungen: {
+        tagesbeginn: prefs.dayStart, tagesende: prefs.dayEnd,
+        pause_nach_min: prefs.focusMin, pausenlaenge_min: prefs.breakMin,
+        mittag: prefs.lunchMin ? prefs.lunch : null, mittag_min: prefs.lunchMin, wuensche: prefs.wishes || null,
+      },
+      feste_bloecke: ctx.fixed.map((i) => ({ art: kindOf(i) === "todo" ? "todo_fix" : kindOf(i), titel: i.title, start: i.start, dauer_min: durOf(i) })),
+      todos: ctx.todos.map((i) => ({
+        id: i.id, titel: i.title, dauer_min: durOf(i),
+        prioritaet: ["", "hoch", "normal", "niedrig"][i.priority || 2],
+        pausen_task: !!i.forBreak, wunschtag: i.date || null, notiz: i.notes || null,
+      })),
+    };
+    const res = await api("/planner/plan", { method: "POST", body: { data } });
+    const valid = new Set(ctx.todos.map((i) => i.id));
+    if (!res || !Array.isArray(res.schedule)) throw new Error("Unerwartete Antwort");
+    return {
+      schedule: res.schedule.filter((s) => valid.has(s.id) && toMin(s.start) != null).map((s) => ({ id: s.id, start: toMin(s.start) })),
+      pauses: (res.pauses || []).filter((p) => toMin(p.start) != null).map((p) => ({
+        start: toMin(p.start),
+        duration: Math.min(90, Math.max(5, Number(p.duration) || 15)),
+        title: String(p.title || "Pause").slice(0, 60),
+      })),
+      note: String(res.note || "").slice(0, 800),
+    };
+  }
+
+  async function applyPlan(date, ctx, plan, by) {
+    const upsert = [];
+    const placed = new Set();
+    for (const s of plan.schedule) {
+      if (s.start < 0 || s.start >= 1440 || placed.has(s.id)) continue;
+      placed.add(s.id);
+      upsert.push({ id: s.id, data: { ...items.get(s.id), date, start: fromMin(s.start) } });
+    }
+    for (const t of ctx.todos) {
+      if (!placed.has(t.id) && t.date === date && toMin(t.start) != null) upsert.push({ id: t.id, data: { ...items.get(t.id), start: null } });
+    }
+    for (const p of plan.pauses) {
+      if (p.start < 0 || p.start + p.duration > 1440) continue;
+      upsert.push({
+        id: newId() + upsert.length,
+        data: {
+          title: p.title, kind: "pause", forBreak: false, duration: p.duration, date, start: fromMin(p.start),
+          done: false, color: "yellow", emoji: /mittag/i.test(p.title) ? "🍽️" : "☕", repeat: "none",
+          source: "plan", createdAt: new Date().toISOString(),
+        },
+      });
+    }
+    await sync(upsert, ctx.oldPlanPauses.map((p) => p.id));
+    await setNote(date, plan.note, by);
+    return { placed: placed.size, unplanned: ctx.todos.length - placed.size };
+  }
+
+  let planning = false;
+  async function planDay() {
+    if (planning) return;
+    const date = cur;
+    const ctx = planContext(date);
+    if (!ctx.todos.length) return toast("Keine offenen To-dos. Trag erst etwas in den Eingang ein.");
+    planning = true;
+    const btn = $("#pl-plan");
+    btn.disabled = true;
+    btn.lastChild.textContent = "Plane …";
+    let plan = null;
+    let by = "claude";
+    try {
+      plan = await claudePlan(date, ctx);
+    } catch {
+      plan = rulePlan(ctx);
+      by = "regel";
+    }
+    const r = await applyPlan(date, ctx, plan, by);
+    toast(`${r.placed} eingeplant` + (r.unplanned ? ` · ${r.unplanned} passen nicht und bleiben im Eingang` : ""));
+    planning = false;
+    btn.disabled = false;
+    btn.lastChild.textContent = "Tag planen";
+    setTab("day");
+  }
+
+  let clearArmed = false;
+  async function clearPlan() {
+    const b = $("#pl-clear");
+    if (!clearArmed) {
+      clearArmed = true;
+      b.textContent = "Wirklich leeren?";
+      setTimeout(() => { clearArmed = false; b.textContent = "Plan leeren"; }, 4000);
+      return;
+    }
+    clearArmed = false;
+    b.textContent = "Plan leeren";
+    const all = dayItems(cur);
+    await sync(
+      all.filter(isOpenTodo).map((i) => ({ id: i.id, data: { ...items.get(i.id), start: null, date: null } })),
+      all.filter((i) => kindOf(i) === "pause" && i.source === "plan").map((i) => i.id),
+    );
+    await setNote(cur, "", "regel");
+    toast("Plan geleert. Deine To-dos liegen wieder im Eingang.");
+  }
+
+  /* ---------- connection to MyStudy ---------- */
+
+  // Adds learning tasks from the current progress (words that don't sit yet,
+  // grammar exercises that are due), without duplicating open ones.
+  async function suggestStudy() {
+    try {
+      const [decks, grammar] = await Promise.all([api("/decks"), api("/grammar")]);
+      const notKnown = decks.reduce((n, d) => n + d.count - d.known, 0);
+      const due = grammar.filter((g) => new Date(g.due_at) <= new Date()).length;
+      const open = [...items.values()].filter(isOpenTodo);
+      const upsert = [];
+      const base = { kind: "todo", repeat: "none", done: false, date: null, start: null, source: "mystudy", createdAt: new Date().toISOString() };
+      const wantRounds = Math.min(3, Math.ceil(notKnown / 10));
+      for (let i = open.filter((x) => x.link === "vocab").length; i < wantRounds; i++) {
+        upsert.push({ id: newId() + i, data: { ...base, title: "Vokabelrunde (10 Wörter)", forBreak: true, duration: 10, priority: 2, color: "green", emoji: "📚", link: "vocab", notes: `${notKnown} Wörter sitzen noch nicht` } });
+      }
+      if (!open.some((x) => x.link === "grammar")) {
+        upsert.push({ id: newId() + "g", data: { ...base, title: due ? `Grammatik-Training (${due} fällig)` : "Grammatik: neues Thema üben", forBreak: false, duration: due > 15 ? 30 : 20, priority: due ? 1 : 3, color: "violet", emoji: "✏️", link: "grammar" } });
+      }
+      if (!upsert.length) return toast("Deine Lernaufgaben sind schon im Plan.");
+      await sync(upsert);
+      toast(`${upsert.length} Lernaufgaben im Eingang`);
+      setTab("todo");
+    } catch (ex) {
+      toast(ex.message);
+    }
+  }
+
+  // Called after a finished vocabulary round or grammar training.
+  async function studyDone(link) {
+    try {
+      if (!loaded) await load();
+    } catch {
+      return;
+    }
+    const t = today();
+    const candidates = [...items.entries()]
+      .filter(([, it]) => isOpenTodo(it) && it.link === link && (!it.date || it.date <= t))
+      .sort(([, a], [, b]) => (a.date === t ? 0 : 1) - (b.date === t ? 0 : 1) || (toMin(a.start) ?? 9999) - (toMin(b.start) ?? 9999));
+    if (!candidates.length) return;
+    const [id, it] = candidates[0];
+    await patch(id, { done: true, date: it.date || t, start: it.start || fromMin(Math.max(0, nowMinutes() - durOf(it))) });
+    toast(`„${it.title}“ im Kalender abgehakt ✓`);
+  }
+
+  /* ---------- navigation ---------- */
+
+  function go(date) { cur = date; renderAll(); }
+  function setTab(t) {
+    tab = t;
+    $("#pl-grid").dataset.tab = t;
+    $("#pl-tab-day").setAttribute("aria-selected", String(t === "day"));
+    $("#pl-tab-todo").setAttribute("aria-selected", String(t === "todo"));
+  }
+
+  async function open(date) {
+    if (date) cur = date;
+    show("view-planner");
+    if (location.hash !== "#kalender") history.replaceState(null, "", "#kalender");
+    setTab(tab);
+    $("#pl-rows").textContent = "";
+    $("#pl-rows").append(el("p", "pl-empty", "Lade deinen Tag …"));
+    try {
+      await load();
+    } catch (ex) {
+      toast(ex.message);
+    }
+    renderAll();
+  }
+
+  $("#pl-quick").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#pl-quick-title");
+    const title = input.value.trim();
+    if (!title) return;
+    input.value = "";
+    save(newId(), { title, kind: "todo", forBreak: false, duration: 30, priority: 2, date: null, start: null, done: false, color: "coral", emoji: guessEmoji(title, "todo"), source: "manual", createdAt: new Date().toISOString() });
+  });
+  $("#pl-plan").addEventListener("click", planDay);
+  $("#pl-clear").addEventListener("click", clearPlan);
+  $("#pl-study").addEventListener("click", suggestStudy);
+  $("#pl-settings").addEventListener("click", openSettings);
+  $("#pl-today").addEventListener("click", () => go(today()));
+  $("#pl-fab").addEventListener("click", () => openSheet(null, { date: cur }));
+  $("#pl-tab-day").addEventListener("click", () => setTab("day"));
+  $("#pl-tab-todo").addEventListener("click", () => setTab("todo"));
+  $("#today-card").addEventListener("click", () => open(today()));
+  setInterval(() => { if (!$("#view-planner").hidden && sheetBg.hidden && cur === today()) renderDay(); }, 60000);
+
+  return { open, refreshTodayCard, studyDone };
+}

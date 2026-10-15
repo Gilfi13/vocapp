@@ -3,6 +3,7 @@
 // policies, so only this function (using the service role) can read them.
 // Every query is scoped to the logged-in user.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import Anthropic from "npm:@anthropic-ai/sdk";
 
 const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const PBKDF2_ITERATIONS = 210_000;
@@ -109,6 +110,43 @@ function checkNewCredentials(username: string, password: string): string | null 
   }
   if (password.length < MIN_PASSWORD) return `Passwort: mindestens ${MIN_PASSWORD} Zeichen`;
   return null;
+}
+
+/* ---------- planner: day planning with Claude ---------- */
+
+const PLANNER_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const anthropic = ANTHROPIC_KEY ? new Anthropic({ apiKey: ANTHROPIC_KEY }) : null;
+
+const PLAN_PROMPT = `Du bist ein persönlicher Tagesplaner für einen Studenten. Plane den Tag realistisch und sinnvoll.
+
+Regeln:
+- Feste Blöcke (Termine, Vorlesungen, feste Pausen) dürfen nicht überlappt werden. Plane nichts vor "jetzt" (falls gesetzt) und nur zwischen Tagesbeginn und Tagesende.
+- Normale To-dos dürfen sich nicht überlappen. Lass 5–10 Minuten Luft vor und nach Terminen, wenn Platz ist.
+- Nach spätestens pause_nach_min Minuten Arbeit am Stück kommt eine Pause (pausenlaenge_min). Plane eine Mittagspause ein, falls mittag gesetzt ist und noch keine feste Pause in der Nähe liegt.
+- Wichtige und anspruchsvolle Aufgaben eher früh und in lange freie Blöcke. Ähnliches bündeln. Kurzes in Lücken. Lernaufgaben zu einem Fach gern kurz vor der Vorlesung dieses Fachs.
+- To-dos mit pausen_task=true gehören IN Pausen (deine neuen oder die festen) oder in kurze Lücken zwischen Vorlesungen. Start innerhalb der Pause/Lücke, nicht länger als sie.
+- Was nicht sinnvoll passt, kommt in "unplanned" (lieber ehrlich als überladen). Beachte die Wünsche.
+
+Antworte NUR mit JSON in genau dieser Form, ohne Text davor oder danach:
+{"schedule":[{"id":"<todo id>","start":"HH:MM"}],"pauses":[{"start":"HH:MM","duration":15,"title":"Pause"}],"unplanned":["<todo id>"],"note":"2–3 kurze, freundliche Sätze auf Deutsch, du-Form: warum der Plan so ist und worauf man achten sollte."}
+
+Daten:
+`;
+
+async function planWithClaude(input: string) {
+  const response = await anthropic!.beta.messages.create({
+    model: "claude-opus-5-5",
+    max_tokens: 16000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    messages: [{ role: "user", content: PLAN_PROMPT + input }],
+  } as any);
+  if (response.stop_reason === "refusal") throw new Error("Claude hat die Planung abgelehnt");
+  const text = response.content.map((b: any) => (b.type === "text" ? b.text : "")).join("");
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("Claude hat keinen Plan geliefert");
+  return JSON.parse(match[0]);
 }
 
 Deno.serve(async (req) => {
@@ -246,6 +284,98 @@ Deno.serve(async (req) => {
       });
       if (error) throw error;
       return json(data);
+    }
+
+    /* ---------- planner (calendar, to-dos, breaks) ---------- */
+
+    if (seg[0] === "planner") {
+      // GET /planner – all own entries, settings and day notes
+      if (method === "GET" && seg.length === 1) {
+        const [items, settings, notes] = await Promise.all([
+          db.from("planner_items").select("id, data").eq("user_id", uid),
+          db.from("planner_settings").select("prefs").eq("user_id", uid).maybeSingle(),
+          db.from("planner_notes").select("day, text, author").eq("user_id", uid),
+        ]);
+        if (items.error) throw items.error;
+        if (notes.error) throw notes.error;
+        return json({
+          items: items.data.map((r: any) => ({ ...r.data, id: r.id })),
+          prefs: settings.data?.prefs ?? {},
+          notes: Object.fromEntries(notes.data.map((n: any) => [n.day, { text: n.text, by: n.author }])),
+        });
+      }
+
+      // POST /planner/sync {upsert: [{id, data}], remove: [id]} – save or delete entries
+      if (method === "POST" && path === "/planner/sync") {
+        const { upsert = [], remove = [] } = await req.json();
+        if (!Array.isArray(upsert) || !Array.isArray(remove) || upsert.length + remove.length > 200) {
+          return json({ error: "Ungültige Änderung" }, 400);
+        }
+        const rows = [];
+        for (const u of upsert) {
+          const ok = typeof u?.id === "string" && PLANNER_ID_RE.test(u.id) &&
+            u.data && typeof u.data === "object" && !Array.isArray(u.data) &&
+            JSON.stringify(u.data).length <= 8000;
+          if (!ok) return json({ error: "Ungültiger Eintrag" }, 400);
+          const { id: _ignored, ...data } = u.data;
+          rows.push({ user_id: uid, id: u.id, data, updated_at: new Date().toISOString() });
+        }
+        if (remove.some((id: unknown) => typeof id !== "string" || !PLANNER_ID_RE.test(id))) {
+          return json({ error: "Ungültiger Eintrag" }, 400);
+        }
+        if (rows.length) {
+          const { error } = await db.from("planner_items").upsert(rows);
+          if (error) throw error;
+        }
+        if (remove.length) {
+          const { error } = await db.from("planner_items").delete().eq("user_id", uid).in("id", remove);
+          if (error) throw error;
+        }
+        return json({ ok: true });
+      }
+
+      // PUT /planner/prefs {prefs}
+      if (method === "PUT" && path === "/planner/prefs") {
+        const { prefs } = await req.json();
+        if (!prefs || typeof prefs !== "object" || JSON.stringify(prefs).length > 4000) {
+          return json({ error: "Ungültige Einstellungen" }, 400);
+        }
+        const { error } = await db
+          .from("planner_settings")
+          .upsert({ user_id: uid, prefs, updated_at: new Date().toISOString() });
+        if (error) throw error;
+        return json({ ok: true });
+      }
+
+      // PUT /planner/notes/:day {text, by} · DELETE /planner/notes/:day
+      if (seg[1] === "notes" && /^\d{4}-\d{2}-\d{2}$/.test(seg[2] ?? "") && seg.length === 3) {
+        if (method === "DELETE") {
+          const { error } = await db.from("planner_notes").delete().eq("user_id", uid).eq("day", seg[2]);
+          if (error) throw error;
+          return json({ ok: true });
+        }
+        if (method === "PUT") {
+          const { text, by } = await req.json();
+          const { error } = await db.from("planner_notes").upsert({
+            user_id: uid,
+            day: seg[2],
+            text: String(text ?? "").slice(0, 1000),
+            author: by === "claude" ? "claude" : "regel",
+            updated_at: new Date().toISOString(),
+          });
+          if (error) throw error;
+          return json({ ok: true });
+        }
+      }
+
+      // POST /planner/plan {data} – Claude plans the day (needs the ANTHROPIC_API_KEY secret)
+      if (method === "POST" && path === "/planner/plan") {
+        if (!anthropic) return json({ error: "Claude ist noch nicht eingerichtet" }, 501);
+        const { data } = await req.json();
+        const input = JSON.stringify(data ?? {});
+        if (input.length > 30000) return json({ error: "Zu viele Einträge" }, 400);
+        return json(await planWithClaude(input));
+      }
     }
 
     /* ---------- decks & cards of the logged-in user ---------- */

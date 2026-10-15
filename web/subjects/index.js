@@ -84,5 +84,7 @@ export function initSubjects({ show, onEnglish }) {
   renderTiles();
   document.querySelectorAll("[data-subjects]").forEach((b) => b.addEventListener("click", showSubjects));
 
-  return { showSubjects };
+  const openSubjectById = (id) => openSubject(SUBJECTS.find((s) => s.id === id) ?? SUBJECTS[0]);
+
+  return { showSubjects, openSubjectById };
 }
