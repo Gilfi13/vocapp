@@ -457,6 +457,95 @@
     </div>
   </section>
 
+  <!-- Mathe: flashcard overview -->
+  <section id="view-math" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-subjects>← Fächer</button>
+      <div class="title">Mathe</div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page">
+      <section class="hero">
+        <div class="hero-head">
+          <div>
+            <p class="eyebrow">Angewandte Statistik und Mathematik · HNU WS 2026/27</p>
+            <p class="hero-number"><strong id="mt-due">0</strong> <span id="mt-due-label">Karten fällig</span></p>
+          </div>
+          <button id="mt-train" class="btn primary big">Training starten</button>
+        </div>
+        <p class="muted" id="mt-info"></p>
+        <div class="stackbar big" id="mt-bar"><span class="known"></span><span class="learning"></span></div>
+        <p class="muted small" id="mt-known"></p>
+        <p class="muted small">Karteikarten zu Symbolen und Begriffen (Übungsblatt 1 und Skript). Vorderseite ansehen, Lösung im Kopf überlegen, umdrehen und ehrlich bewerten. Gewusste Karten kommen nach 1, 3, 7, 14 und 30 Tagen wieder, ab dem dritten Mal in Folge <b>sitzt</b> eine Karte.</p>
+      </section>
+      <div id="math-chapters"></div>
+    </main>
+  </section>
+
+  <!-- Mathe: one chapter -->
+  <section id="view-math-chapter" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-math>← Mathe</button>
+      <div class="title" id="mc-title"></div>
+      <div class="spacer-btn"></div>
+    </header>
+    <main class="page narrow-ish">
+      <div class="topic-actions">
+        <button class="btn primary" id="mc-start">Alle abfragen</button>
+        <button class="btn" id="mc-due">Nur fällige</button>
+        <span class="muted small" id="mc-progress"></span>
+      </div>
+      <p class="muted small">Tippe auf eine Karte, um die Rückseite zu sehen oder nur diese Karte abzufragen.</p>
+      <div id="mc-list" class="m-list"></div>
+    </main>
+  </section>
+
+  <!-- Mathe: learn -->
+  <section id="view-math-learn" class="view" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-math>← Beenden</button>
+      <div class="progress"><div id="ml-bar" class="progress-fill"></div></div>
+      <div class="pill" id="ml-counter"></div>
+    </header>
+    <main class="page narrow">
+      <div class="m-flip" id="ml-flip">
+        <div class="m-flip-inner">
+          <div class="m-card m-face front">
+            <p class="eyebrow" id="ml-chapter"></p>
+            <div class="m-symbol" id="ml-front"></div>
+            <p class="muted small m-tap">Antippen zum Umdrehen</p>
+          </div>
+          <div class="m-card m-face back">
+            <p class="eyebrow" id="ml-chapter-back"></p>
+            <div class="m-symbol small" id="ml-front-small"></div>
+            <div id="ml-back"></div>
+          </div>
+        </div>
+      </div>
+      <div class="m-controls">
+        <button id="ml-reveal" class="btn primary big">Umdrehen</button>
+        <div id="ml-judge" class="judge" hidden>
+          <button id="ml-wrong" class="judge-btn wrong">✕ Nochmal</button>
+          <button id="ml-right" class="judge-btn right">✓ Gewusst</button>
+        </div>
+      </div>
+      <p class="muted small quiz-hint">Tastatur: Leertaste = umdrehen, 1 / ← = nochmal, 2 / → = gewusst.</p>
+    </main>
+  </section>
+
+  <!-- Mathe: done -->
+  <section id="view-math-done" class="view center" hidden>
+    <div class="done-card">
+      <div class="done-check">✓</div>
+      <h1 id="md-title"></h1>
+      <p class="muted" id="md-stats"></p>
+      <div class="row">
+        <button id="md-again" class="btn">Nochmal</button>
+        <button class="btn primary" data-math>Zur Übersicht</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Deck options menu -->
   <div id="menu" class="menu" hidden>
     <button data-menu="import">Wörter importieren</button>
