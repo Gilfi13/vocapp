@@ -149,6 +149,235 @@ async function planWithClaude(input: string) {
   return JSON.parse(match[0]);
 }
 
+/* ---------- planner: Claude as calendar assistant ---------- */
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const ymdOf = (d: Date) => `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+const dayIndex = (s: string) => new Date(`${s}T00:00:00Z`).getUTCDay();
+
+// Does a planner entry take place on this date? (same rules as web/planner.js)
+function occursOn(it: any, date: string): boolean {
+  const r = it.repeat || "none";
+  if (r === "none" || (it.kind || "todo") === "todo") return it.date === date;
+  if (!it.date || date < it.date) return false;
+  if (it.until && date > it.until) return false;
+  if (Array.isArray(it.skip) && it.skip.includes(date)) return false;
+  const dow = dayIndex(date);
+  if (r === "daily") return true;
+  if (r === "weekdays") return dow >= 1 && dow <= 5;
+  if (r === "weekly") return dow === dayIndex(it.date);
+  return it.date === date;
+}
+
+const ENTRY_SCHEMA = {
+  type: "object",
+  properties: {
+    id: { type: "string", description: "Nur zum Ändern eines bestehenden Eintrags angeben" },
+    title: { type: "string" },
+    kind: { type: "string", enum: ["todo", "termin", "pause"] },
+    date: { type: ["string", "null"], description: "YYYY-MM-DD; bei To-dos ohne festen Tag null" },
+    start: { type: ["string", "null"], description: "HH:MM; bei To-dos ohne Uhrzeit null (landen im Eingang)" },
+    duration: { type: "integer", description: "Minuten" },
+    repeat: { type: "string", enum: ["none", "daily", "weekdays", "weekly"] },
+    forBreak: { type: "boolean", description: "Kleiner Pausen-Task, der in Pausen gelegt wird" },
+    priority: { type: "integer", enum: [1, 2, 3], description: "1 wichtig, 2 normal, 3 kann warten" },
+    place: { type: ["string", "null"], enum: ["uni", null], description: "uni = findet an der Hochschule statt; die App trägt dann Anfahrt und Zug automatisch ein" },
+    done: { type: "boolean" },
+    notes: { type: "string" },
+    color: { type: "string", enum: ["coral", "orange", "yellow", "green", "teal", "blue", "violet", "pink"] },
+    emoji: { type: "string" },
+    link: { type: ["string", "null"], description: "vocab, grammar oder subject:<fach-id> für Lernaufgaben in MyStudy" },
+  },
+  required: ["title", "kind"],
+};
+
+const CHAT_TOOLS = [
+  {
+    name: "list_entries",
+    description: "Liest Termine, Pausen und eingeplante To-dos zwischen zwei Tagen (wiederkehrende Termine sind aufgelöst) sowie alle offenen To-dos im Eingang.",
+    input_schema: {
+      type: "object",
+      properties: { from: { type: "string", description: "YYYY-MM-DD" }, to: { type: "string", description: "YYYY-MM-DD" } },
+      required: ["from", "to"],
+    },
+  },
+  {
+    name: "save_entries",
+    description: "Legt Einträge an oder ändert sie (mit id). Felder, die du bei einer Änderung weglässt, bleiben erhalten.",
+    input_schema: { type: "object", properties: { entries: { type: "array", items: ENTRY_SCHEMA } }, required: ["entries"] },
+  },
+  {
+    name: "delete_entries",
+    description: "Löscht Einträge (bei wiederkehrenden die ganze Serie).",
+    input_schema: { type: "object", properties: { ids: { type: "array", items: { type: "string" } } }, required: ["ids"] },
+  },
+  {
+    name: "skip_occurrence",
+    description: "Lässt einen wiederkehrenden Termin an einem einzelnen Tag ausfallen.",
+    input_schema: { type: "object", properties: { id: { type: "string" }, date: { type: "string" } }, required: ["id", "date"] },
+  },
+  {
+    name: "study_status",
+    description: "Lernstand in MyStudy: Vokabeln (wie viele sitzen) und fällige Grammatik-Übungen.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "update_settings",
+    description: "Ändert Einstellungen: about (Infos über den Nutzer), wishes (Wünsche fürs Planen), trainsOut / trainsBack (Zugliste, eine Verbindung pro Zeile 'HH:MM-HH:MM'), walkStation, walkUni (Minuten).",
+    input_schema: {
+      type: "object",
+      properties: {
+        about: { type: "string" }, wishes: { type: "string" }, trainsOut: { type: "string" }, trainsBack: { type: "string" },
+        walkStation: { type: "integer" }, walkUni: { type: "integer" },
+      },
+    },
+  },
+  { type: "web_search_20260209", name: "web_search", max_uses: 5 },
+];
+
+async function runChatTool(uid: string, name: string, input: any, state: { changed: boolean }): Promise<string> {
+  if (name === "list_entries") {
+    const { data, error } = await db.from("planner_items").select("id, data").eq("user_id", uid);
+    if (error) throw error;
+    const from = String(input.from), to = String(input.to);
+    const days: Record<string, any[]> = {};
+    for (let d = new Date(`${from}T00:00:00Z`); ymdOf(d) <= to && Object.keys(days).length < 31; d.setUTCDate(d.getUTCDate() + 1)) {
+      const day = ymdOf(d);
+      days[day] = data
+        .filter((r: any) => r.data.start && occursOn(r.data, day))
+        .map((r: any) => ({ id: r.id, ...r.data, date: day }))
+        .sort((a: any, b: any) => a.start.localeCompare(b.start));
+    }
+    const inbox = data.filter((r: any) => (r.data.kind || "todo") === "todo" && !r.data.done && !r.data.start)
+      .map((r: any) => ({ id: r.id, ...r.data }));
+    return JSON.stringify({ days, inbox });
+  }
+  if (name === "save_entries") {
+    const entries = Array.isArray(input.entries) ? input.entries.slice(0, 50) : [];
+    const ids = entries.map((e: any) => e.id).filter(Boolean);
+    const { data: existing } = ids.length
+      ? await db.from("planner_items").select("id, data").eq("user_id", uid).in("id", ids)
+      : { data: [] as any[] };
+    const old = new Map((existing ?? []).map((r: any) => [r.id, r.data]));
+    const rows = entries.map((e: any) => {
+      const id = e.id && PLANNER_ID_RE.test(e.id) ? e.id : `c${Date.now().toString(36)}${crypto.randomUUID().slice(0, 6)}`;
+      const { id: _drop, ...fields } = e;
+      const data = { done: false, repeat: "none", forBreak: false, priority: 2, source: "claude", createdAt: new Date().toISOString(), ...(old.get(id) ?? {}), ...fields };
+      return { user_id: uid, id, data, updated_at: new Date().toISOString() };
+    });
+    if (rows.length) {
+      const { error } = await db.from("planner_items").upsert(rows);
+      if (error) throw error;
+      state.changed = true;
+    }
+    return JSON.stringify({ saved: rows.map((r: any) => ({ id: r.id, title: r.data.title, date: r.data.date, start: r.data.start })) });
+  }
+  if (name === "delete_entries") {
+    const ids = (Array.isArray(input.ids) ? input.ids : []).filter((id: unknown) => typeof id === "string" && PLANNER_ID_RE.test(id));
+    if (ids.length) {
+      const { error } = await db.from("planner_items").delete().eq("user_id", uid).in("id", ids);
+      if (error) throw error;
+      state.changed = true;
+    }
+    return JSON.stringify({ deleted: ids });
+  }
+  if (name === "skip_occurrence") {
+    const { data: row } = await db.from("planner_items").select("data").eq("user_id", uid).eq("id", String(input.id)).maybeSingle();
+    if (!row) return "Eintrag nicht gefunden";
+    const skip = [...new Set([...(row.data.skip ?? []), String(input.date)])];
+    const { error } = await db.from("planner_items").update({ data: { ...row.data, skip } }).eq("user_id", uid).eq("id", String(input.id));
+    if (error) throw error;
+    state.changed = true;
+    return "ok";
+  }
+  if (name === "study_status") {
+    const [decks, grammar] = await Promise.all([
+      db.from("cards").select("box, last_reviewed").eq("user_id", uid),
+      db.from("grammar_progress").select("due_at").eq("user_id", uid),
+    ]);
+    const cards = decks.data ?? [];
+    return JSON.stringify({
+      vokabeln_gesamt: cards.length,
+      vokabeln_sitzen: cards.filter((c: any) => c.box >= KNOWN_BOX).length,
+      grammatik_faellig: (grammar.data ?? []).filter((g: any) => new Date(g.due_at) <= new Date()).length,
+    });
+  }
+  if (name === "update_settings") {
+    const { data: row } = await db.from("planner_settings").select("prefs").eq("user_id", uid).maybeSingle();
+    const allowed = ["about", "wishes", "trainsOut", "trainsBack", "walkStation", "walkUni"];
+    const patch = Object.fromEntries(Object.entries(input ?? {}).filter(([k]) => allowed.includes(k)));
+    const { error } = await db.from("planner_settings").upsert({ user_id: uid, prefs: { ...(row?.prefs ?? {}), ...patch }, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    state.changed = true;
+    return "ok";
+  }
+  return "Unbekanntes Werkzeug";
+}
+
+async function chatWithClaude(uid: string, body: any) {
+  const { data: settings } = await db.from("planner_settings").select("prefs").eq("user_id", uid).maybeSingle();
+  const prefs = settings?.prefs ?? {};
+  const system = `Du bist Claude, der persönliche Assistent in der App MyStudy. Du führst den Kalender des Nutzers und planst mit ihm seinen Tag. Sprich Deutsch, locker, in Du-Form, und antworte kurz (das läuft am Handy).
+
+Heute ist ${body.weekday}, ${body.today}, es ist ${body.now} Uhr (Europe/Berlin). Gerade angezeigt wird der ${body.viewing}.
+
+Was du über den Nutzer weißt:
+${prefs.about || "(noch nichts eingetragen)"}
+Wünsche fürs Planen: ${prefs.wishes || "–"}
+Tag von ${prefs.dayStart ?? "08:00"} bis ${prefs.dayEnd ?? "21:00"}, Pause nach ${prefs.focusMin ?? 90} min Arbeit.
+Anfahrt zur Uni: ${prefs.walkStation ?? 20} min zu Fuß zum Bahnhof ${prefs.homeStation ?? "Neu-Ulm"}, dann Zug nach ${prefs.uniStation ?? "Kempten (Allgäu) Hbf"}, von dort ${prefs.walkUni ?? 15} min zur Hochschule.
+Zugliste hin: ${prefs.trainsOut || "(leer)"} · zurück: ${prefs.trainsBack || "(leer)"}
+
+So arbeitest du:
+- Lies mit list_entries, bevor du planst oder etwas verschiebst. Ändere nur, was der Nutzer will oder was er dir aufgetragen hat.
+- Termine an der Hochschule bekommen place "uni". Die App trägt dann Fußweg und Zug hin und zurück automatisch ein (Einträge mit source "travel" – die nicht selbst anlegen oder ändern). Wenn du echte Zugzeiten kennst oder findest, schreib sie mit update_settings in die Zugliste.
+- Beim Planen: feste Termine nicht überlappen, Wichtiges früh, Pausen einplanen, kleine Pausen-Tasks (forBreak) in Pausen oder Lücken, Lernaufgaben vor der passenden Vorlesung. To-dos plant man ein, indem man date und start setzt.
+- Für Infos aus dem Internet (z. B. Spielplan FC Hawangen auf bfv.de) nutze web_search. Sag ehrlich, wenn du etwas nicht sicher weißt.
+- Sag am Ende kurz, was du eingetragen oder geändert hast.`;
+
+  const messages: any[] = (Array.isArray(body.messages) ? body.messages : [])
+    .filter((m: any) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim())
+    .slice(-16)
+    .map((m: any) => ({ role: m.role, content: m.content.slice(0, 4000) }));
+  while (messages.length && messages[0].role !== "user") messages.shift();
+  if (!messages.length) throw new Error("Keine Nachricht");
+
+  const state = { changed: false };
+  for (let i = 0; i < 12; i++) {
+    const response: any = await anthropic!.beta.messages.create({
+      model: "claude-opus-5-5",
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      system,
+      tools: CHAT_TOOLS,
+      messages,
+    } as any);
+    if (response.stop_reason === "refusal") return { reply: "Dabei kann ich leider nicht helfen.", changed: state.changed };
+    messages.push({ role: "assistant", content: response.content });
+    if (response.stop_reason === "pause_turn") continue;
+    const uses = response.content.filter((b: any) => b.type === "tool_use");
+    if (response.stop_reason !== "tool_use" || !uses.length) {
+      const reply = response.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim();
+      return { reply, changed: state.changed };
+    }
+    const results = [];
+    for (const u of uses) {
+      let content: string;
+      let isError = false;
+      try {
+        content = await runChatTool(uid, u.name, u.input ?? {}, state);
+      } catch (err) {
+        content = `Fehler: ${String((err as Error)?.message ?? err)}`;
+        isError = true;
+      }
+      results.push({ type: "tool_result", tool_use_id: u.id, content, is_error: isError });
+    }
+    messages.push({ role: "user", content: results });
+  }
+  return { reply: "Das war mir zu viel auf einmal – frag mich bitte Schritt für Schritt.", changed: state.changed };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
@@ -375,6 +604,12 @@ Deno.serve(async (req) => {
         const input = JSON.stringify(data ?? {});
         if (input.length > 30000) return json({ error: "Zu viele Einträge" }, 400);
         return json(await planWithClaude(input));
+      }
+
+      // POST /planner/chat {messages, today, now, weekday, viewing} – Claude as calendar assistant
+      if (method === "POST" && path === "/planner/chat") {
+        if (!anthropic) return json({ error: "Claude ist noch nicht eingerichtet" }, 501);
+        return json(await chatWithClaude(uid, await req.json()));
       }
     }
 

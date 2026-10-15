@@ -112,7 +112,21 @@
         </aside>
       </div>
     </main>
+    <button class="pl-ask" id="pl-chat-open"><span aria-hidden="true">✦</span> Frag Claude</button>
     <button class="pl-fab" id="pl-fab" aria-label="Neuer Eintrag">+</button>
+    <section class="pl-chat" id="pl-chat" hidden aria-label="Claude">
+      <header class="pl-chat-head">
+        <span class="pl-chat-av">✦</span>
+        <div class="pl-chat-title"><strong>Claude</strong><span>plant deinen Tag mit dir</span></div>
+        <button class="btn ghost small" id="pl-chat-clear">Neu</button>
+        <button class="pl-iconbtn" id="pl-chat-close" aria-label="Schließen">✕</button>
+      </header>
+      <div class="pl-chat-log" id="pl-chat-log"></div>
+      <form class="pl-chat-form" id="pl-chat-form" autocomplete="off">
+        <input type="text" id="pl-chat-input" placeholder="Schreib Claude …" aria-label="Nachricht an Claude">
+        <button type="submit" class="btn primary">Senden</button>
+      </form>
+    </section>
     <div class="pl-sheet-bg" id="pl-sheet-bg" hidden>
       <div class="pl-sheet" id="pl-sheet" role="dialog" aria-modal="true" aria-label="Eintrag"></div>
     </div>

@@ -40,7 +40,12 @@ const KIND_DEF = {
   pause: { color: "yellow", emoji: "☕" },
 };
 const REPEAT_LABEL = { daily: "täglich", weekdays: "Mo–Fr", weekly: "wöchentlich" };
-const DEFAULT_PREFS = { dayStart: "08:00", dayEnd: "21:00", focusMin: 90, breakMin: 15, lunch: "12:30", lunchMin: 45, wishes: "" };
+const DEFAULT_PREFS = {
+  dayStart: "08:00", dayEnd: "21:00", focusMin: 90, breakMin: 15, lunch: "12:30", lunchMin: 45, wishes: "",
+  // Anfahrt zur Uni: Fußweg zum Heimatbahnhof, Bahnhof → Hochschule, Zugliste "06:17-07:27" pro Zeile
+  travelOn: true, homeStation: "Neu-Ulm", uniStation: "Kempten (Allgäu) Hbf", walkStation: 20, walkUni: 15, rideMin: 70,
+  trainsOut: "", trainsBack: "", about: "",
+};
 const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
 
 const guessEmoji = (title, k) => { for (const [re, e] of GUESS) if (re.test(title)) return e; return KIND_DEF[k].emoji; };
@@ -149,7 +154,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       b.setAttribute("aria-label", `${WD[dd.getDay()]} ${dd.getDate()}. ${MO[dd.getMonth()]}`);
       b.append(el("span", "n", WDS[dd.getDay()]), el("span", "d", dd.getDate()));
       const dots = el("span", "dots");
-      dayItems(ds).filter((x) => kindOf(x) !== "pause").slice(0, 4).forEach((x) => {
+      dayItems(ds).filter((x) => kindOf(x) !== "pause" && x.source !== "travel").slice(0, 4).forEach((x) => {
         const i2 = el("i");
         i2.style.setProperty("--c", colorOf(x));
         dots.append(i2);
@@ -225,7 +230,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const dayS = toMin(prefs.dayStart) ?? 480;
     const dayE = toMin(prefs.dayEnd) ?? 1260;
     const nowM = nowMinutes();
-    let nowPlaced = cur !== today();
+    const isToday = cur === today();
+    // the item running right now gets the red line inside its capsule
+    const running = isToday ? main.find((i) => toMin(i.start) <= nowM && nowM < toMin(i.start) + durOf(i)) : null;
+    let nowPlaced = !isToday || !!running;
     const putNow = (before) => {
       if (!nowPlaced && nowM < before) { nowPlaced = true; box.append(nowRow(nowM)); }
     };
@@ -239,7 +247,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       const s = toMin(it.start);
       if (s - cursor >= 10) gapUntil(cursor, s);
       putNow(s);
-      box.append(itemRow(it, inPause.get(it.id) || [], s < prevEnd));
+      box.append(itemRow(it, inPause.get(it.id) || [], s < prevEnd, it === running ? nowM : null));
       prevEnd = Math.max(prevEnd, s + durOf(it));
       cursor = Math.max(cursor, s + durOf(it));
     }
@@ -270,7 +278,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     return r;
   }
 
-  function itemRow(it, minis, overlap) {
+  function itemRow(it, minis, overlap, nowIn) {
     const k = kindOf(it);
     const s = toMin(it.start);
     const e = s + durOf(it);
@@ -279,14 +287,23 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const tm = el("div", "tm", fromMin(s));
     tm.append(el("span", null, fromMin(e)));
     const cap = el("div", "pl-cap", emojiOf(it));
-    cap.style.height = `${Math.max(56, Math.min(200, durOf(it) * 1.1)) + minis.length * 22}px`;
+    const capH = Math.max(56, Math.min(200, durOf(it) * 1.1)) + minis.length * 22;
+    cap.style.height = `${capH}px`;
+    if (nowIn != null) {
+      r.classList.add("running");
+      const line = el("div", "pl-nowin");
+      line.style.top = `${6 + Math.round(((nowIn - s) / durOf(it)) * capH)}px`;
+      line.append(el("span", "tm", fromMin(nowIn)), el("span", "ln"));
+      r.append(line);
+    }
     const card = el("div", "card");
     const ttl = el("button", "ttl", it.title || (k === "pause" ? "Pause" : "Ohne Titel"));
     ttl.onclick = () => openSheet(it.id, null, it.date);
     card.append(ttl);
     const meta = el("span", "meta");
     meta.append(fmtDur(durOf(it)));
-    if (k === "termin") meta.append(el("span", "pl-pill", "Termin"));
+    if (it.source === "travel") meta.append(el("span", "pl-pill", "Anfahrt"));
+    else if (k === "termin") meta.append(el("span", "pl-pill", it.place === "uni" ? "Uni" : "Termin"));
     if (k === "pause") meta.append(el("span", "pl-pill", "Pause"));
     if (REPEAT_LABEL[it.repeat]) meta.append(el("span", "pl-pill", REPEAT_LABEL[it.repeat]));
     if (it.notes) meta.append(el("span", "note", it.notes));
@@ -381,6 +398,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     if (!box) return;
     try {
       await load();
+      await ensureTravel();
     } catch {
       box.hidden = true;
       return;
@@ -511,7 +529,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const emoWrap = el("div", "pl-field");
     emoWrap.append(el("span", "lbl", "Symbol"), emojis);
 
-    sheet.append(seg, preview, hint, durWrap, row1, row2, colWrap, emoWrap, field("Notiz", noteIn));
+    const uniBox = inputEl("checkbox", "");
+    uniBox.checked = st.place === "uni";
+    const uniWrap = el("label", "pl-check");
+    uniWrap.append(uniBox, el("span", null, "An der Uni – Anfahrt mit dem Zug automatisch eintragen"));
+    sheet.append(seg, preview, hint, durWrap, row1, row2, uniWrap, colWrap, emoWrap, field("Notiz", noteIn));
 
     const HINT = {
       todo: "Ohne Uhrzeit kommt es in den Eingang, und beim Planen bekommt es einen guten Platz.",
@@ -524,6 +546,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       hint.textContent = HINT[kind];
       prioF.hidden = !(kind === "todo" || kind === "pausetask");
       repF.hidden = !(kind === "termin" || kind === "pause");
+      uniWrap.hidden = kind !== "termin";
       const e = emoji || guessEmoji(title.value, kind);
       cap.textContent = e;
       cap.style.setProperty("--c", colorVar(color));
@@ -577,6 +600,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         color,
         emoji: emoji || guessEmoji(t, kind),
         notes: noteIn.value.trim(),
+        place: kind === "termin" && uniBox.checked ? "uni" : null,
         done: it ? !!it.done : false,
         source: it?.source === "plan" && kind !== "pause" ? "manual" : it?.source || "manual",
         createdAt: it?.createdAt || new Date().toISOString(),
@@ -605,6 +629,27 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const r1 = el("div", "pl-frow"); r1.append(field("Mein Tag beginnt", sS), field("und endet", sE));
     const r2 = el("div", "pl-frow"); r2.append(field("Pause nach", sF), field("Pausenlänge", sB));
     const r3 = el("div", "pl-frow"); r3.append(field("Mittag um", sL), field("Mittag dauert", sLM));
+    const tOn = inputEl("checkbox", "");
+    tOn.checked = prefs.travelOn !== false;
+    const tOnWrap = el("label", "pl-check");
+    tOnWrap.append(tOn, el("span", null, "Anfahrt zur Uni automatisch eintragen"));
+    const tWalk = selectEl([[10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"], [30, "30 min"]], prefs.walkStation);
+    const tUni = selectEl([[5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"]], prefs.walkUni);
+    const tOut = el("textarea");
+    tOut.value = prefs.trainsOut || "";
+    tOut.placeholder = "Eine Verbindung pro Zeile: Abfahrt-Ankunft\n06:17-07:27\n07:17-08:27";
+    const tBack = el("textarea");
+    tBack.value = prefs.trainsBack || "";
+    tBack.placeholder = "z. B.\n16:33-17:43\n17:33-18:43";
+    const r4 = el("div", "pl-frow");
+    r4.append(field(`Weg zum Bahnhof ${prefs.homeStation}`, tWalk), field(`${prefs.uniStation.replace(/ Hbf$/, "")} Bahnhof → Hochschule`, tUni));
+    const r5 = el("div", "pl-frow");
+    r5.append(field(`Züge ${prefs.homeStation} → Kempten`, tOut), field(`Züge Kempten → ${prefs.homeStation}`, tBack));
+    const about = el("textarea");
+    about.value = prefs.about || "";
+    about.placeholder = "z. B. Ich studiere in Kempten, spiele Fußball beim FC Hawangen …";
+    const travelHead = el("h4", "pl-h4", "Anfahrt zur Uni");
+    const travelHint = el("p", "pl-hint", "Ohne Zugliste schätzt die App die Fahrt (ca. " + prefs.rideMin + " min) und markiert sie zum Prüfen. Am genauesten wird es, wenn du deine üblichen Züge aus dem DB Navigator einträgst.");
     const acts = el("div", "pl-actions");
     const cancel = el("button", "btn ghost", "Abbrechen");
     cancel.onclick = closeSheet;
@@ -615,14 +660,18 @@ export function initPlanner({ api, show, toast, openStudy }) {
         dayStart: sS.value || "08:00", dayEnd: sE.value || "21:00",
         focusMin: Number(sF.value), breakMin: Number(sB.value),
         lunch: sL.value || "12:30", lunchMin: Number(sLM.value), wishes: sW.value.trim(),
+        travelOn: tOn.checked, walkStation: Number(tWalk.value), walkUni: Number(tUni.value),
+        trainsOut: tOut.value.trim(), trainsBack: tBack.value.trim(), about: about.value.trim(),
       };
       closeSheet();
       renderAll();
+      ensureTravel();
       try { await api("/planner/prefs", { method: "PUT", body: { prefs } }); }
       catch (ex) { toast(`Nicht gespeichert: ${ex.message}`); }
     };
     acts.append(el("span", "spacer"), cancel, ok);
-    sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW), acts);
+    sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW),
+      travelHead, tOnWrap, r4, r5, travelHint, field("Über mich (für Claude)", about), acts);
     sheetBg.hidden = false;
   }
 
@@ -774,6 +823,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
   async function planDay() {
     if (planning) return;
     const date = cur;
+    await ensureTravel();
     const ctx = planContext(date);
     if (!ctx.todos.length) return toast("Keine offenen To-dos. Trag erst etwas in den Eingang ein.");
     planning = true;
@@ -861,6 +911,130 @@ export function initPlanner({ api, show, toast, openStudy }) {
     toast(`„${it.title}“ im Kalender abgehakt ✓`);
   }
 
+  /* ---------- Anfahrt zur Uni ---------- */
+
+  // "06:17-07:27" lines → [{dep, arr}] in minutes
+  function parseTrains(text) {
+    return String(text || "").split(/\n+/).map((l) => l.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/))
+      .filter(Boolean).map((m) => ({ dep: toMin(m[1]), arr: toMin(m[2]) })).filter((t) => t.arr > t.dep)
+      .sort((a, b) => a.dep - b.dep);
+  }
+
+  // The travel blocks a uni day needs: walk + train there, train + walk back.
+  function travelPlan(date) {
+    const lectures = dayItems(date).filter((i) => kindOf(i) === "termin" && i.place === "uni");
+    if (!lectures.length) return [];
+    const first = Math.min(...lectures.map((i) => toMin(i.start)));
+    const last = Math.max(...lectures.map((i) => toMin(i.start) + durOf(i)));
+    const walkS = Number(prefs.walkStation) || 20;
+    const walkU = Number(prefs.walkUni) || 15;
+    const ride = Number(prefs.rideMin) || 70;
+    const home = prefs.homeStation;
+    const uni = prefs.uniStation.replace(/ \(Allgäu\) Hbf$| Hbf$/, "");
+    const mustArrive = first - walkU;
+    const mayLeave = last + walkU;
+    // a listed train only counts if it doesn't mean waiting for ages
+    const out = parseTrains(prefs.trainsOut).filter((t) => t.arr <= mustArrive && t.arr >= mustArrive - 75).pop()
+      || { arr: Math.floor((mustArrive - 5) / 5) * 5, dep: Math.floor((mustArrive - 5) / 5) * 5 - ride, guess: true };
+    const back = parseTrains(prefs.trainsBack).find((t) => t.dep >= mayLeave && t.dep <= mayLeave + 75)
+      || { dep: Math.ceil((mayLeave + 5) / 5) * 5, arr: Math.ceil((mayLeave + 5) / 5) * 5 + ride, guess: true };
+    const check = "Zeit geschätzt – bitte im DB Navigator prüfen";
+    const base = { kind: "termin", forBreak: false, repeat: "none", done: false, date, color: "teal", source: "travel", priority: 2 };
+    const block = (key, start, duration, title, emoji, notes) =>
+      ({ id: `tr-${date}-${key}`, data: { ...base, start: fromMin(start), duration, title, emoji, notes } });
+    return [
+      block("a", out.dep - walkS, walkS, `Zum Bahnhof ${home}`, "🚶", ""),
+      block("b", out.dep, out.arr - out.dep, `Zug ${home} → ${uni}`, "🚆", out.guess ? check : "aus deiner Zugliste"),
+      block("c", out.arr, walkU, "Zur Hochschule", "🚶", ""),
+      block("d", back.dep - walkU, walkU, `Zum Bahnhof ${uni}`, "🚶", ""),
+      block("e", back.dep, back.arr - back.dep, `Zug ${uni} → ${home}`, "🚆", back.guess ? check : "aus deiner Zugliste"),
+      block("f", back.arr, walkS, "Heimweg", "🏠", ""),
+    ].filter((b) => toMin(b.data.start) >= 0 && b.data.duration > 0);
+  }
+
+  // Keeps the travel blocks of the next days in line with lectures and settings.
+  async function ensureTravel(days = 8) {
+    const t = today();
+    const upsert = [];
+    const remove = [];
+    for (let i = 0; i < days; i++) {
+      const date = addDays(t, i);
+      const want = prefs.travelOn === false ? [] : travelPlan(date);
+      const have = [...items.entries()].filter(([, it]) => it.source === "travel" && it.date === date);
+      const wantIds = new Set(want.map((w) => w.id));
+      for (const [id] of have) if (!wantIds.has(id)) remove.push(id);
+      for (const w of want) {
+        const old = items.get(w.id);
+        const same = old && old.start === w.data.start && old.duration === w.data.duration && old.title === w.data.title && old.notes === w.data.notes;
+        if (!same) upsert.push({ ...w, data: { ...w.data, createdAt: old?.createdAt || new Date().toISOString() } });
+      }
+    }
+    if (upsert.length || remove.length) await sync(upsert, remove);
+  }
+
+  /* ---------- Claude im Kalender ---------- */
+
+  const CHAT_KEY = "planner.chat";
+  let chat = [];
+  try { chat = JSON.parse(localStorage.getItem(CHAT_KEY)) || []; } catch { chat = []; }
+  const saveChat = () => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(chat.slice(-30))); } catch { /* ignore */ } };
+
+  function renderChat() {
+    const log = $("#pl-chat-log");
+    log.textContent = "";
+    if (!chat.length) {
+      log.append(el("p", "pl-chat-empty", "Frag mich etwas oder sag mir, was ich eintragen soll. Zum Beispiel: „Plan mir morgen“, „Trag mir Mittwoch 18 Uhr Zahnarzt ein“ oder „Wann spielt FC Hawangen als Nächstes?“"));
+    }
+    for (const m of chat) log.append(el("div", `pl-msg ${m.role}`, m.content));
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function openChat() {
+    $("#pl-chat").hidden = false;
+    renderChat();
+    $("#pl-chat-input").focus();
+  }
+
+  let chatting = false;
+  async function sendChat(text) {
+    if (chatting || !text.trim()) return;
+    chatting = true;
+    chat.push({ role: "user", content: text.trim() });
+    saveChat();
+    renderChat();
+    const thinking = el("div", "pl-msg assistant thinking", "Claude denkt nach …");
+    $("#pl-chat-log").append(thinking);
+    $("#pl-chat-log").scrollTop = $("#pl-chat-log").scrollHeight;
+    const n = new Date();
+    try {
+      const res = await api("/planner/chat", {
+        method: "POST",
+        body: { messages: chat.slice(-16), today: today(), now: fromMin(nowMinutes()), weekday: WD[n.getDay()], viewing: cur },
+      });
+      chat.push({ role: "assistant", content: res.reply || "Erledigt." });
+      if (res.changed) { await load(); await ensureTravel(); renderAll(); }
+    } catch (ex) {
+      const msg = /eingerichtet/.test(ex.message)
+        ? "Ich bin in der App noch nicht eingerichtet: In Supabase fehlt das Secret ANTHROPIC_API_KEY."
+        : `Das hat nicht geklappt: ${ex.message}`;
+      chat.push({ role: "assistant", content: msg });
+    }
+    saveChat();
+    chatting = false;
+    renderChat();
+  }
+
+  $("#pl-chat-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const input = $("#pl-chat-input");
+    const text = input.value;
+    input.value = "";
+    sendChat(text);
+  });
+  $("#pl-chat-open").addEventListener("click", openChat);
+  $("#pl-chat-close").addEventListener("click", () => { $("#pl-chat").hidden = true; });
+  $("#pl-chat-clear").addEventListener("click", () => { chat = []; saveChat(); renderChat(); });
+
   /* ---------- navigation ---------- */
 
   function go(date) { cur = date; renderAll(); }
@@ -884,6 +1058,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       toast(ex.message);
     }
     renderAll();
+    ensureTravel();
   }
 
   $("#pl-quick").addEventListener("submit", (e) => {

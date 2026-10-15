@@ -98,5 +98,12 @@ Browser (iPad)                    Vercel                 Supabase
 - **Verbindung zu MyStudy**: „Lernaufgaben holen“ legt Vokabelrunden (je 10 Wörter, die noch nicht sitzen)
   und fälliges Grammatik-Training in den Eingang. Solche Aufgaben haben einen `link` (`vocab`, `grammar`,
   `subject:<id>`), öffnen den passenden Bereich und haken sich nach einer fertigen Lernrunde selbst ab.
+- **Anfahrt zur Uni**: Termine mit `place: "uni"` bekommen automatisch Fußweg zum Bahnhof, Zug hin und
+  zurück und Heimweg (Einträge mit `source: "travel"`, IDs `tr-<tag>-a…f`). Die Züge kommen aus der Zugliste
+  in den Einstellungen („06:17-07:27“ pro Zeile); ohne passenden Zug schätzt die App die Fahrt und markiert sie
+  zum Prüfen. Live-Fahrpläne der Bahn lassen sich vom Server aus nicht abfragen (DB blockt das).
+- **Frag Claude**: Chat im Kalender (`POST /planner/chat`). Claude liest und ändert Einträge über Werkzeuge
+  (`list_entries`, `save_entries`, `delete_entries`, `skip_occurrence`, `study_status`, `update_settings`) und kann
+  im Web suchen. Braucht wie „Tag planen“ das Secret `ANTHROPIC_API_KEY`.
 - Am Handy: MyStudy über „Zum Home-Bildschirm“ hinzufügen; `/#kalender` öffnet direkt den Kalender
   (auch als Verknüpfung im App-Manifest).
