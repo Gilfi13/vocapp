@@ -43,7 +43,7 @@ const REPEAT_LABEL = { daily: "täglich", weekdays: "Mo–Fr", weekly: "wöchent
 const DEFAULT_PREFS = {
   dayStart: "08:00", dayEnd: "21:00", focusMin: 90, breakMin: 15, lunch: "12:30", lunchMin: 45, wishes: "",
   // Anfahrt zur Uni: Fußweg zum Heimatbahnhof, Bahnhof → Hochschule, Zugliste "06:17-07:27" pro Zeile
-  travelOn: true, homeStation: "Neu-Ulm", uniStation: "Kempten (Allgäu) Hbf", walkStation: 20, walkUni: 15, rideMin: 70,
+  travelOn: true, homeStation: "Memmingen", uniStation: "Neu-Ulm", walkStation: 0, walkUni: 20, rideMin: 35,
   trainsOut: "", trainsBack: "", about: "",
 };
 const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
@@ -633,8 +633,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     tOn.checked = prefs.travelOn !== false;
     const tOnWrap = el("label", "pl-check");
     tOnWrap.append(tOn, el("span", null, "Anfahrt zur Uni automatisch eintragen"));
-    const tWalk = selectEl([[10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"], [30, "30 min"]], prefs.walkStation);
-    const tUni = selectEl([[5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"]], prefs.walkUni);
+    const tWalk = selectEl([[0, "–"], [5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"], [30, "30 min"]], prefs.walkStation);
+    const tUni = selectEl([[5, "5 min"], [10, "10 min"], [15, "15 min"], [20, "20 min"], [25, "25 min"], [30, "30 min"]], prefs.walkUni);
+    const tRide = selectEl([[20, "20 min"], [25, "25 min"], [30, "30 min"], [35, "35 min"], [40, "40 min"], [45, "45 min"], [60, "1 h"], [75, "1 h 15"]], prefs.rideMin);
     const tOut = el("textarea");
     tOut.value = prefs.trainsOut || "";
     tOut.placeholder = "Eine Verbindung pro Zeile: Abfahrt-Ankunft\n06:17-07:27\n07:17-08:27";
@@ -642,9 +643,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     tBack.value = prefs.trainsBack || "";
     tBack.placeholder = "z. B.\n16:33-17:43\n17:33-18:43";
     const r4 = el("div", "pl-frow");
-    r4.append(field(`Weg zum Bahnhof ${prefs.homeStation}`, tWalk), field(`${prefs.uniStation.replace(/ Hbf$/, "")} Bahnhof → Hochschule`, tUni));
+    r4.append(field(`Von daheim zum Bahnhof ${prefs.homeStation}`, tWalk), field(`Bahnhof ${prefs.uniStation} → Hochschule`, tUni), field("Zugfahrt etwa", tRide));
     const r5 = el("div", "pl-frow");
-    r5.append(field(`Züge ${prefs.homeStation} → Kempten`, tOut), field(`Züge Kempten → ${prefs.homeStation}`, tBack));
+    r5.append(field(`Züge ${prefs.homeStation} → ${prefs.uniStation}`, tOut), field(`Züge ${prefs.uniStation} → ${prefs.homeStation}`, tBack));
     const about = el("textarea");
     about.value = prefs.about || "";
     about.placeholder = "z. B. Ich studiere in Kempten, spiele Fußball beim FC Hawangen …";
@@ -660,7 +661,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         dayStart: sS.value || "08:00", dayEnd: sE.value || "21:00",
         focusMin: Number(sF.value), breakMin: Number(sB.value),
         lunch: sL.value || "12:30", lunchMin: Number(sLM.value), wishes: sW.value.trim(),
-        travelOn: tOn.checked, walkStation: Number(tWalk.value), walkUni: Number(tUni.value),
+        travelOn: tOn.checked, walkStation: Number(tWalk.value), walkUni: Number(tUni.value), rideMin: Number(tRide.value),
         trainsOut: tOut.value.trim(), trainsBack: tBack.value.trim(), about: about.value.trim(),
       };
       closeSheet();
@@ -926,9 +927,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     if (!lectures.length) return [];
     const first = Math.min(...lectures.map((i) => toMin(i.start)));
     const last = Math.max(...lectures.map((i) => toMin(i.start) + durOf(i)));
-    const walkS = Number(prefs.walkStation) || 20;
-    const walkU = Number(prefs.walkUni) || 15;
-    const ride = Number(prefs.rideMin) || 70;
+    const walkS = Math.max(0, Number(prefs.walkStation) || 0);
+    const walkU = Math.max(0, Number(prefs.walkUni) || 0);
+    const ride = Number(prefs.rideMin) || 35;
     const home = prefs.homeStation;
     const uni = prefs.uniStation.replace(/ \(Allgäu\) Hbf$| Hbf$/, "");
     const mustArrive = first - walkU;
