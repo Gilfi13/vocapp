@@ -49,6 +49,10 @@ const DEFAULT_PREFS = {
   trainOutDays: [1, 2, 3, 4, 5], trainBackDays: [1, 2, 3, 4, 5],
   // Hinfahrt ohne Zug (z. B. mit dem Auto) an diesen Tagen, feste Zeiten
   carOutDays: [], carDep: "07:00", carArr: "07:50", carTitle: "Fahrt nach Ulm",
+  // Sport daheim: ab diesem Tag beim Planen vorschlagen (leer = aus)
+  sportFrom: "", sportPerWeek: 3, sportMin: 45,
+  // nach jeder Vorlesung eine Nacharbeiten-Aufgabe bis zur nächsten Vorlesung des Fachs
+  reviewOn: true, reviewMin: 45, reviewMade: [],
 };
 const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
 
@@ -139,7 +143,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const t = today();
     return [...items.entries()].map(([id, it]) => ({ ...it, id }))
       .filter((it) => isOpenTodo(it) && (toMin(it.start) == null ? (!it.date || it.date <= date) : it.date < t))
-      .sort((a, b) => (a.priority || 2) - (b.priority || 2) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+      .sort((a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")) || (a.priority || 2) - (b.priority || 2) || String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
   }
 
   /* ---------- week strip ---------- */
@@ -425,6 +429,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         tt.onclick = () => openSheet(it.id);
         const m = el("span", "m");
         if (toMin(it.start) != null && it.date < today()) { m.append(el("span", "late", "verpasst"), el("br")); }
+        else if (it.due) { m.append(el("span", it.due <= addDays(today(), 1) ? "late" : null, `bis ${shortDate(it.due)}`), el("br")); }
         else if (it.priority === 1) { m.append(el("span", "late", "wichtig"), el("br")); }
         m.append(fmtDur(durOf(it)));
         li.append(checkBtn(it), el("span", "e", emojiOf(it)), tt, m);
@@ -653,6 +658,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         emoji: emoji || guessEmoji(t, kind),
         notes: noteIn.value.trim(),
         place: kind === "termin" && uniBox.checked ? "uni" : null,
+        lecture: kind === "termin" && (uniBox.checked || !!it?.lecture),
         done: it ? !!it.done : false,
         source: it?.source === "plan" && kind !== "pause" ? "manual" : it?.source || "manual",
         createdAt: it?.createdAt || new Date().toISOString(),
@@ -853,6 +859,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         id: i.id, titel: i.title, dauer_min: durOf(i),
         prioritaet: ["", "hoch", "normal", "niedrig"][i.priority || 2],
         pausen_task: !!i.forBreak, wunschtag: i.date || null, notiz: i.notes || null,
+        frist: i.due || null, sport: !!i.sport,
       })),
     };
     const res = await api("/planner/plan", { method: "POST", body: { data } });
@@ -901,6 +908,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
     if (planning) return;
     const date = cur;
     await ensureTravel();
+    await ensureReviews();
+    await ensureSport(date);
     const ctx = planContext(date);
     if (!ctx.todos.length) return toast("Keine offenen To-dos. Trag erst etwas in den Eingang ein.");
     planning = true;
@@ -988,6 +997,67 @@ export function initPlanner({ api, show, toast, openStudy }) {
     toast(`„${it.title}“ im Kalender abgehakt ✓`);
   }
 
+  /* ---------- Nacharbeiten & Sport ---------- */
+
+  const isLecture = (it) => kindOf(it) === "termin" && (it.place === "uni" || it.lecture);
+  const shortDate = (d) => `${WDS[parseYmd(d).getDay()]} ${d.slice(8)}.${d.slice(5, 7)}.`;
+
+  async function savePrefs() {
+    try { await api("/planner/prefs", { method: "PUT", body: { prefs } }); } catch { /* next save retries */ }
+  }
+
+  // After a lecture: "Nacharbeiten: <Fach>" with a deadline before the next lecture of that subject.
+  async function ensureReviews() {
+    if (prefs.reviewOn === false) return;
+    const t = today();
+    const nowM = nowMinutes();
+    const made = new Set(prefs.reviewMade || []);
+    const upsert = [];
+    for (let back = 3; back >= 0; back--) {
+      const d = addDays(t, -back);
+      for (const lec of dayItems(d).filter((i) => isLecture(i) && REPEAT_LABEL[i.repeat])) {
+        if (d === t && toMin(lec.start) + durOf(lec) > nowM) continue; // not over yet
+        const id = `rv-${lec.id}-${d}`.slice(0, 64);
+        if (made.has(id) || items.has(id)) continue;
+        let next = null;
+        for (let i = 1; i <= 21 && !next; i++) {
+          const nd = addDays(d, i);
+          if (occursOn(items.get(lec.id), nd)) next = nd;
+        }
+        if (!next) continue;
+        made.add(id);
+        upsert.push({ id, data: {
+          title: `Nacharbeiten: ${lec.title}`, kind: "todo", forBreak: false, duration: Number(prefs.reviewMin) || 45,
+          priority: 2, date: null, start: null, due: next, done: false, repeat: "none", color: "violet", emoji: "📖",
+          notes: `Stoff vom ${shortDate(d)} – bis vor der nächsten Vorlesung am ${shortDate(next)}`,
+          source: "review", createdAt: new Date().toISOString(),
+        } });
+      }
+    }
+    if (!upsert.length) return;
+    prefs.reviewMade = [...made].slice(-80);
+    await sync(upsert);
+    await savePrefs();
+  }
+
+  // From prefs.sportFrom on: suggest a home workout on days that have room, about sportPerWeek times a week.
+  async function ensureSport(date) {
+    if (!prefs.sportFrom || date < prefs.sportFrom) return;
+    const all = [...items.values()];
+    const has = (d) => all.some((it) => it.sport && it.date === d);
+    if (has(date) || has(addDays(date, -1))) return;
+    const monday = addDays(date, -((parseYmd(date).getDay() + 6) % 7));
+    let week = 0;
+    for (let i = 0; i < 7; i++) if (has(addDays(monday, i))) week++;
+    if (week >= (Number(prefs.sportPerWeek) || 3)) return;
+    if (dayItems(date).some((i) => /spiel|training|party/i.test(i.title || ""))) return;
+    await save(newId(), {
+      title: "Sport daheim", kind: "todo", forBreak: false, sport: true, duration: Number(prefs.sportMin) || 45,
+      priority: 2, date, start: null, done: false, repeat: "none", color: "green", emoji: "🏃",
+      notes: "Vorschlag – passt es heute nicht, einfach löschen oder verschieben", source: "sport", createdAt: new Date().toISOString(),
+    });
+  }
+
   /* ---------- Anfahrt zur Uni ---------- */
 
   // "06:17-07:27" lines → [{dep, arr}] in minutes
@@ -1066,7 +1136,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     if (!chat.length) {
       log.append(el("p", "pl-chat-empty", "Frag mich etwas oder sag mir, was ich eintragen soll. Zum Beispiel: „Plan mir morgen“, „Trag mir Mittwoch 18 Uhr Zahnarzt ein“ oder „Wann spielt FC Hawangen als Nächstes?“"));
     }
-    for (const m of chat) log.append(el("div", `pl-msg ${m.role}`, m.content));
+    for (const m of chat) {
+      const b = el("div", `pl-msg ${m.role}`, m.content);
+      if (m.files?.length) b.prepend(el("span", "pl-att", `📎 ${m.files.join(", ")}`));
+      log.append(b);
+    }
     log.scrollTop = log.scrollHeight;
   }
 
@@ -1077,10 +1151,42 @@ export function initPlanner({ api, show, toast, openStudy }) {
   }
 
   let chatting = false;
+  let attachments = []; // [{name, type, data}] for the next message
+
+  const readAsBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+
+  async function addFiles(files) {
+    for (const f of files) {
+      if (!/^(application\/pdf|image\/(png|jpeg|gif|webp))$/.test(f.type)) { toast(`${f.name}: nur PDF oder Bilder`); continue; }
+      if (attachments.reduce((n, a) => n + a.size, 0) + f.size > 8 * 1024 * 1024) { toast("Zusammen höchstens 8 MB"); break; }
+      attachments.push({ name: f.name, type: f.type, size: f.size, data: await readAsBase64(f) });
+    }
+    renderAttachments();
+  }
+  function renderAttachments() {
+    const box = $("#pl-chat-files");
+    box.textContent = "";
+    box.hidden = !attachments.length;
+    attachments.forEach((a, i) => {
+      const chip = el("button", "pl-file", `📎 ${a.name} ✕`);
+      chip.type = "button";
+      chip.onclick = () => { attachments.splice(i, 1); renderAttachments(); };
+      box.append(chip);
+    });
+  }
+
   async function sendChat(text) {
-    if (chatting || !text.trim()) return;
+    if (chatting || (!text.trim() && !attachments.length)) return;
     chatting = true;
-    chat.push({ role: "user", content: text.trim() });
+    const files = attachments;
+    attachments = [];
+    renderAttachments();
+    chat.push({ role: "user", content: text.trim() || "Hier sind Unterlagen aus der Vorlesung. Schätz ab, was zu tun ist, und plan es vor der nächsten Vorlesung ein.", files: files.map((f) => f.name) });
     saveChat();
     renderChat();
     const thinking = el("div", "pl-msg assistant thinking", "Claude denkt nach …");
@@ -1090,7 +1196,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     try {
       const res = await api("/planner/chat", {
         method: "POST",
-        body: { messages: chat.slice(-16), today: today(), now: fromMin(nowMinutes()), weekday: WD[n.getDay()], viewing: cur },
+        body: {
+          messages: chat.slice(-16).map(({ role, content }) => ({ role, content })),
+          attachments: files.map(({ name, type, data }) => ({ name, type, data })),
+          today: today(), now: fromMin(nowMinutes()), weekday: WD[n.getDay()], viewing: cur,
+        },
       });
       chat.push({ role: "assistant", content: res.reply || "Erledigt." });
       if (res.changed) { await load(); await ensureTravel(); renderAll(); }
@@ -1113,6 +1223,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
     sendChat(text);
   });
   $("#pl-chat-open").addEventListener("click", openChat);
+  $("#pl-chat-attach").addEventListener("click", () => $("#pl-chat-file").click());
+  $("#pl-chat-file").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
   $("#pl-chat-close").addEventListener("click", () => { $("#pl-chat").hidden = true; });
   $("#pl-chat-clear").addEventListener("click", () => { chat = []; saveChat(); renderChat(); });
 
@@ -1139,7 +1251,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
       toast(ex.message);
     }
     renderAll();
-    ensureTravel();
+    await ensureTravel();
+    ensureReviews();
   }
 
   /* ---------- drag & drop (laptop) ---------- */

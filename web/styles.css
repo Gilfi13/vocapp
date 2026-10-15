@@ -1049,3 +1049,6 @@ body.pl-dragging .pl-gap button { border-color: var(--blue); color: var(--blue);
 .pl-pick { padding: 0; max-height: 50dvh; overflow-y: auto; }
 .pl-pick li { cursor: pointer; }
 .pl-pick .m.late { color: var(--red); }
+.pl-chat-files { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 0; }
+.pl-file { border: 1px solid var(--blue-line); background: var(--blue-soft); color: var(--blue); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-att { display: block; font-size: 12px; opacity: .85; margin-bottom: 4px; }

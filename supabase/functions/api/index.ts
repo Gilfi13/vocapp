@@ -126,6 +126,8 @@ Regeln:
 - Nach spätestens pause_nach_min Minuten Arbeit am Stück kommt eine Pause (pausenlaenge_min). Plane eine Mittagspause ein, falls mittag gesetzt ist und noch keine feste Pause in der Nähe liegt.
 - Wichtige und anspruchsvolle Aufgaben eher früh und in lange freie Blöcke. Ähnliches bündeln. Kurzes in Lücken. Lernaufgaben zu einem Fach gern kurz vor der Vorlesung dieses Fachs.
 - To-dos mit pausen_task=true gehören IN Pausen (deine neuen oder die festen) oder in kurze Lücken zwischen Vorlesungen. Start innerhalb der Pause/Lücke, nicht länger als sie.
+- To-dos mit "frist" müssen vor diesem Tag erledigt sein; je näher die Frist, desto eher einplanen (z. B. Nacharbeiten vor der nächsten Vorlesung).
+- To-dos mit sport=true: Bewegung nicht direkt nach dem Essen und nicht spät abends, gern als Ausgleich nach langem Sitzen.
 - Was nicht sinnvoll passt, kommt in "unplanned" (lieber ehrlich als überladen). Beachte die Wünsche.
 
 Antworte NUR mit JSON in genau dieser Form, ohne Text davor oder danach:
@@ -183,6 +185,8 @@ const ENTRY_SCHEMA = {
     priority: { type: "integer", enum: [1, 2, 3], description: "1 wichtig, 2 normal, 3 kann warten" },
     place: { type: ["string", "null"], enum: ["uni", null], description: "uni = findet an der Hochschule statt; die App trägt dann Anfahrt und Zug automatisch ein" },
     done: { type: "boolean" },
+    due: { type: ["string", "null"], description: "Frist YYYY-MM-DD: bis wann das To-do erledigt sein soll" },
+    sport: { type: "boolean", description: "Sport-Einheit" },
     notes: { type: "string" },
     color: { type: "string", enum: ["coral", "orange", "yellow", "green", "teal", "blue", "violet", "pink"] },
     emoji: { type: "string" },
@@ -332,6 +336,9 @@ So arbeitest du:
 - Lies mit list_entries, bevor du planst oder etwas verschiebst. Ändere nur, was der Nutzer will oder was er dir aufgetragen hat.
 - Termine an der Hochschule bekommen place "uni". Die App trägt dann Fußweg und Zug hin und zurück automatisch ein (Einträge mit source "travel" – die nicht selbst anlegen oder ändern). Wenn du echte Zugzeiten kennst oder findest, schreib sie mit update_settings in die Zugliste.
 - Beim Planen: feste Termine nicht überlappen, Wichtiges früh, Pausen einplanen, kleine Pausen-Tasks (forBreak) in Pausen oder Lücken, Lernaufgaben vor der passenden Vorlesung. To-dos plant man ein, indem man date und start setzt.
+- Nach jeder Vorlesung legt die App ein To-do "Nacharbeiten: <Fach>" mit Frist (due) bis zur nächsten Vorlesung an. Plane solche Lernzeit vor der Frist ein.
+- Lädt der Nutzer Vorlesungsunterlagen hoch (PDF/Bilder): finde heraus, zu welchem Fach sie gehören, schätze realistisch ab, was zu tun ist (lesen, Aufgaben rechnen, Begriffe lernen), und lege konkrete To-dos mit Dauer und due = Tag der nächsten Vorlesung dieses Fachs an (oder passe das Nacharbeiten-To-do an). Fasse kurz zusammen, worum es in den Unterlagen geht.
+- Sport: wenn der Nutzer Sport machen will, schlag ab und zu eine passende Einheit vor und plane sie mit ein.
 - Für Infos aus dem Internet (z. B. Spielplan FC Hawangen auf bfv.de) nutze web_search. Sag ehrlich, wenn du etwas nicht sicher weißt.
 - Sag am Ende kurz, was du eingetragen oder geändert hast.`;
 
@@ -341,6 +348,19 @@ So arbeitest du:
     .map((m: any) => ({ role: m.role, content: m.content.slice(0, 4000) }));
   while (messages.length && messages[0].role !== "user") messages.shift();
   if (!messages.length) throw new Error("Keine Nachricht");
+
+  // uploaded lecture material goes with the newest user message
+  const files = (Array.isArray(body.attachments) ? body.attachments : []).slice(0, 5)
+    .filter((f: any) => typeof f?.data === "string" && /^(application\/pdf|image\/(png|jpeg|gif|webp))$/.test(f.type));
+  const last = messages[messages.length - 1];
+  if (files.length && last.role === "user") {
+    last.content = [
+      ...files.map((f: any) => f.type === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: f.data }, title: String(f.name ?? "Unterlagen").slice(0, 200) }
+        : { type: "image", source: { type: "base64", media_type: f.type, data: f.data } }),
+      { type: "text", text: last.content },
+    ];
+  }
 
   const state = { changed: false };
   for (let i = 0; i < 12; i++) {

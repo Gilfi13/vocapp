@@ -105,6 +105,11 @@ Browser (iPad)                    Vercel                 Supabase
 - **Frag Claude**: Chat im Kalender (`POST /planner/chat`). Claude liest und ändert Einträge über Werkzeuge
   (`list_entries`, `save_entries`, `delete_entries`, `skip_occurrence`, `study_status`, `update_settings`) und kann
   im Web suchen. Braucht wie „Tag planen“ das Secret `ANTHROPIC_API_KEY`.
+- **Nacharbeiten**: Nach jeder Vorlesung (Termine mit `lecture: true` bzw. Uni-Termine) legt die App
+  „Nacharbeiten: <Fach>“ mit Frist (`due`) bis zur nächsten Vorlesung des Fachs an; der Eingang sortiert nach Frist.
+- **Sport**: Ab `sportFrom` schlägt „Tag planen“ an passenden Tagen „Sport daheim“ vor (ca. `sportPerWeek` pro Woche).
+- **Unterlagen hochladen**: Im Claude-Chat lassen sich PDFs/Bilder anhängen; Claude schätzt den Aufwand und plant To-dos
+  bis zur nächsten Vorlesung ein.
 - **To-dos einplanen**: Am Laptop To-dos aus dem Eingang auf eine freie Zeit (oder hinter einen Termin)
   ziehen, zurück auf den Eingang ziehen nimmt sie wieder raus. Am Handy auf „frei“ tippen und ein offenes
   To-do auswählen.

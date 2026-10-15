@@ -122,7 +122,10 @@
         <button class="pl-iconbtn" id="pl-chat-close" aria-label="Schließen">✕</button>
       </header>
       <div class="pl-chat-log" id="pl-chat-log"></div>
+      <div class="pl-chat-files" id="pl-chat-files" hidden></div>
       <form class="pl-chat-form" id="pl-chat-form" autocomplete="off">
+        <button type="button" class="pl-iconbtn" id="pl-chat-attach" title="Vorlesungsunterlagen anhängen (PDF oder Bild)" aria-label="Datei anhängen">📎</button>
+        <input type="file" id="pl-chat-file" accept="application/pdf,image/png,image/jpeg,image/webp,image/gif" multiple hidden>
         <input type="text" id="pl-chat-input" placeholder="Schreib Claude …" aria-label="Nachricht an Claude">
         <button type="submit" class="btn primary">Senden</button>
       </form>
