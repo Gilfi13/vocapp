@@ -45,6 +45,8 @@ const DEFAULT_PREFS = {
   // Anfahrt zur Uni: Fußweg zum Heimatbahnhof, Bahnhof → Hochschule, Zugliste "06:17-07:27" pro Zeile
   travelOn: true, homeStation: "Memmingen", uniStation: "Neu-Ulm", walkStation: 0, walkUni: 20, rideMin: 35,
   trainsOut: "", trainsBack: "", about: "",
+  // Wochentage (0 = So … 6 = Sa), an denen hin bzw. zurück mit dem Zug gefahren wird
+  trainOutDays: [1, 2, 3, 4, 5], trainBackDays: [1, 2, 3, 4, 5],
 };
 const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
 
@@ -644,6 +646,23 @@ export function initPlanner({ api, show, toast, openStudy }) {
     tBack.placeholder = "z. B.\n16:33-17:43\n17:33-18:43";
     const r4 = el("div", "pl-frow");
     r4.append(field(`Von daheim zum Bahnhof ${prefs.homeStation}`, tWalk), field(`Bahnhof ${prefs.uniStation} → Hochschule`, tUni), field("Zugfahrt etwa", tRide));
+    const dayPicker = (label, days) => {
+      const chosen = new Set(days || [1, 2, 3, 4, 5]);
+      const wrap = el("div", "pl-field");
+      const row = el("div", "pl-durs");
+      for (const d of [1, 2, 3, 4, 5, 6, 0]) {
+        const b = el("button", null, WDS[d]);
+        b.type = "button";
+        b.setAttribute("aria-pressed", String(chosen.has(d)));
+        b.onclick = () => { chosen.has(d) ? chosen.delete(d) : chosen.add(d); b.setAttribute("aria-pressed", String(chosen.has(d))); };
+        row.append(b);
+      }
+      wrap.append(el("span", "lbl", label), row);
+      wrap.value = () => [...chosen].sort();
+      return wrap;
+    };
+    const daysOut = dayPicker("Hinfahrt mit dem Zug an", prefs.trainOutDays);
+    const daysBack = dayPicker("Rückfahrt mit dem Zug an", prefs.trainBackDays);
     const r5 = el("div", "pl-frow");
     r5.append(field(`Züge ${prefs.homeStation} → ${prefs.uniStation}`, tOut), field(`Züge ${prefs.uniStation} → ${prefs.homeStation}`, tBack));
     const about = el("textarea");
@@ -663,6 +682,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
         lunch: sL.value || "12:30", lunchMin: Number(sLM.value), wishes: sW.value.trim(),
         travelOn: tOn.checked, walkStation: Number(tWalk.value), walkUni: Number(tUni.value), rideMin: Number(tRide.value),
         trainsOut: tOut.value.trim(), trainsBack: tBack.value.trim(), about: about.value.trim(),
+        trainOutDays: daysOut.value(), trainBackDays: daysBack.value(),
       };
       closeSheet();
       renderAll();
@@ -672,7 +692,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     };
     acts.append(el("span", "spacer"), cancel, ok);
     sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW),
-      travelHead, tOnWrap, r4, r5, travelHint, field("Über mich (für Claude)", about), acts);
+      travelHead, tOnWrap, r4, daysOut, daysBack, r5, travelHint, field("Über mich (für Claude)", about), acts);
     sheetBg.hidden = false;
   }
 
@@ -943,6 +963,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const base = { kind: "termin", forBreak: false, repeat: "none", done: false, date, color: "teal", source: "travel", priority: 2 };
     const block = (key, start, duration, title, emoji, notes) =>
       ({ id: `tr-${date}-${key}`, data: { ...base, start: fromMin(start), duration, title, emoji, notes } });
+    const dow = parseYmd(date).getDay();
+    const outOn = (prefs.trainOutDays || [1, 2, 3, 4, 5]).includes(dow);
+    const backOn = (prefs.trainBackDays || [1, 2, 3, 4, 5]).includes(dow);
     return [
       block("a", out.dep - walkS, walkS, `Zum Bahnhof ${home}`, "🚶", ""),
       block("b", out.dep, out.arr - out.dep, `Zug ${home} → ${uni}`, "🚆", out.guess ? check : "aus deiner Zugliste"),
@@ -950,7 +973,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       block("d", back.dep - walkU, walkU, `Zum Bahnhof ${uni}`, "🚶", ""),
       block("e", back.dep, back.arr - back.dep, `Zug ${uni} → ${home}`, "🚆", back.guess ? check : "aus deiner Zugliste"),
       block("f", back.arr, walkS, "Heimweg", "🏠", ""),
-    ].filter((b) => toMin(b.data.start) >= 0 && b.data.duration > 0);
+    ].filter((b) => (/-[abc]$/.test(b.id) ? outOn : backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
   }
 
   // Keeps the travel blocks of the next days in line with lectures and settings.
