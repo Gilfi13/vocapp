@@ -1039,3 +1039,13 @@ button { font: inherit; cursor: pointer; color: inherit; }
   .pl-nowin .ln::before { left: 17px; }
   .pl-ask { right: calc(92px + env(safe-area-inset-right)); padding: 0 14px; }
 }
+
+/* ---------- Kalender: ziehen & ablegen, freie Zeit belegen ---------- */
+.pl-draggable { cursor: grab; }
+.pl-draggable:active { cursor: grabbing; }
+body.pl-dragging .pl-gap button { border-color: var(--blue); color: var(--blue); }
+.pl-gap.pl-over button, .pl-it.pl-over .card { background: var(--blue-soft); border-radius: 12px; outline: 2px dashed var(--blue); outline-offset: 2px; }
+.pl-panel.pl-over { outline: 2px dashed var(--blue); outline-offset: 2px; }
+.pl-pick { padding: 0; max-height: 50dvh; overflow-y: auto; }
+.pl-pick li { cursor: pointer; }
+.pl-pick .m.late { color: var(--red); }

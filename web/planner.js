@@ -90,6 +90,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
   let cur = today();
   let loaded = false;
   let tab = "day";
+  let dragId = null;
+  const canDrag = window.matchMedia?.("(pointer: fine)").matches ?? false;
 
   /* ---------- data ---------- */
 
@@ -277,9 +279,50 @@ export function initPlanner({ api, show, toast, openStudy }) {
     r.append(el("span", "tm", fromMin(a)), el("span", "dotc"));
     const btn = el("button", null, `+ ${fmtDur(b - a)} frei`);
     btn.setAttribute("aria-label", `Etwas um ${fromMin(a)} eintragen`);
-    btn.onclick = () => openSheet(null, { date: cur, start: fromMin(Math.ceil(a / 5) * 5) });
+    btn.onclick = () => openGapPicker(Math.ceil(a / 5) * 5, b);
+    r.dataset.drop = Math.ceil(a / 5) * 5;
     r.append(btn);
     return r;
+  }
+
+  // Tap on free time: put an open to-do there, or create a new entry.
+  function openGapPicker(start, end) {
+    const open = inboxItems(cur);
+    sheet.textContent = "";
+    sheet.append(el("div", "pl-grab"), el("h3", null, `${fromMin(start)} – ${fromMin(end)} frei`));
+    if (open.length) {
+      sheet.append(el("p", "pl-hint", "Tipp ein To-do an, dann kommt es hier hin."));
+      const ul = el("ul", "pl-list pl-pick");
+      for (const it of open) {
+        const li = el("li");
+        li.style.setProperty("--c", colorOf(it));
+        const b = el("button", "ttl", it.title);
+        b.onclick = () => { closeSheet(); placeAt(it.id, start); };
+        const fits = durOf(it) <= end - start;
+        const m = el("span", "m" + (fits ? "" : " late"), fmtDur(durOf(it)) + (fits ? "" : " · zu lang"));
+        li.append(el("span", "e", emojiOf(it)), b, m);
+        li.onclick = (e) => { if (e.target === li) b.click(); };
+        ul.append(li);
+      }
+      sheet.append(ul);
+    } else {
+      sheet.append(el("p", "pl-hint", "Im Eingang wartet gerade nichts."));
+    }
+    const acts = el("div", "pl-actions");
+    const cancel = el("button", "btn ghost", "Abbrechen");
+    cancel.onclick = closeSheet;
+    const add = el("button", "btn primary", "Neuer Eintrag");
+    add.onclick = () => openSheet(null, { date: cur, start: fromMin(start) });
+    acts.append(el("span", "spacer"), cancel, add);
+    sheet.append(acts);
+    sheetBg.hidden = false;
+  }
+
+  function placeAt(id, start) {
+    const it = items.get(id);
+    if (!it) return;
+    patch(id, { date: cur, start: fromMin(Math.max(0, Math.min(1435, start))) });
+    toast(`„${it.title}“ um ${fromMin(start)} eingeplant`);
   }
 
   function itemRow(it, minis, overlap, nowIn) {
@@ -287,6 +330,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const s = toMin(it.start);
     const e = s + durOf(it);
     const r = el("div", "pl-it" + (it.done ? " done" : ""));
+    // drop target: a to-do dropped here starts when this block ends (break tasks go into the break)
+    r.dataset.drop = e;
+    if (k === "pause") r.dataset.dropBreak = s;
+    if (k === "todo" && canDrag) makeDraggable(r, it.id);
     r.style.setProperty("--c", colorOf(it));
     const tm = el("div", "tm", fromMin(s));
     tm.append(el("span", null, fromMin(e)));
@@ -373,6 +420,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       for (const it of arr) {
         const li = el("li");
         li.style.setProperty("--c", colorOf(it));
+        if (canDrag) makeDraggable(li, it.id);
         const tt = el("button", "ttl", it.title);
         tt.onclick = () => openSheet(it.id);
         const m = el("span", "m");
@@ -944,8 +992,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
 
   // "06:17-07:27" lines → [{dep, arr}] in minutes
   function parseTrains(text) {
-    return String(text || "").split(/\n+/).map((l) => l.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/))
-      .filter(Boolean).map((m) => ({ dep: toMin(m[1]), arr: toMin(m[2]) })).filter((t) => t.arr > t.dep)
+    return String(text || "").split(/\n+/).map((l) => l.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})\s*(.*)/))
+      .filter(Boolean).map((m) => ({ dep: toMin(m[1]), arr: toMin(m[2]), label: m[3].trim() })).filter((t) => t.arr > t.dep)
       .sort((a, b) => a.dep - b.dep);
   }
 
@@ -976,10 +1024,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const backOn = (prefs.trainBackDays || [1, 2, 3, 4, 5]).includes(dow);
     return [
       block("a", out.dep - walkS, walkS, `Zum Bahnhof ${home}`, "🚶", ""),
-      block("b", out.dep, out.arr - out.dep, `Zug ${home} → ${uni}`, "🚆", out.guess ? check : "aus deiner Zugliste"),
+      block("b", out.dep, out.arr - out.dep, `${out.label || "Zug"} ${home} → ${uni}`, "🚆", out.guess ? check : "laut Fahrplan"),
       block("c", out.arr, walkU, "Zur Hochschule", "🚶", ""),
       block("d", back.dep - walkU, walkU, `Zum Bahnhof ${uni}`, "🚶", ""),
-      block("e", back.dep, back.arr - back.dep, `Zug ${uni} → ${home}`, "🚆", back.guess ? check : "aus deiner Zugliste"),
+      block("e", back.dep, back.arr - back.dep, `${back.label || "Zug"} ${uni} → ${home}`, "🚆", back.guess ? check : "laut Fahrplan"),
       block("f", back.arr, walkS, "Heimweg", "🏠", ""),
       block("g", toMin(prefs.carDep) ?? 420, (toMin(prefs.carArr) ?? 470) - (toMin(prefs.carDep) ?? 420), prefs.carTitle || "Fahrt nach Ulm", "🚗", ""),
     ].filter((b) => !b.id.endsWith("-g") || (prefs.carOutDays || []).includes(dow)).filter((b) => (/-[abc]$/.test(b.id) ? outOn : /-g$/.test(b.id) || backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
@@ -1093,6 +1141,57 @@ export function initPlanner({ api, show, toast, openStudy }) {
     renderAll();
     ensureTravel();
   }
+
+  /* ---------- drag & drop (laptop) ---------- */
+
+  function makeDraggable(node, id) {
+    node.draggable = true;
+    node.classList.add("pl-draggable");
+    node.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", id);
+      e.dataTransfer.effectAllowed = "move";
+      dragId = id;
+      document.body.classList.add("pl-dragging");
+    });
+    node.addEventListener("dragend", () => {
+      dragId = null;
+      document.body.classList.remove("pl-dragging");
+      document.querySelectorAll(".pl-over").forEach((n) => n.classList.remove("pl-over"));
+    });
+  }
+
+  const rows = $("#pl-rows");
+  const target = (e) => e.target.closest?.("[data-drop]");
+  rows.addEventListener("dragover", (e) => {
+    const t = target(e);
+    if (!t || !dragId) return;
+    e.preventDefault();
+    document.querySelectorAll(".pl-over").forEach((n) => n !== t && n.classList.remove("pl-over"));
+    t.classList.add("pl-over");
+  });
+  rows.addEventListener("dragleave", (e) => { const t = target(e); if (t && !t.contains(e.relatedTarget)) t.classList.remove("pl-over"); });
+  rows.addEventListener("drop", (e) => {
+    const t = target(e);
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    if (!t || !id || !items.has(id)) return;
+    e.preventDefault();
+    t.classList.remove("pl-over");
+    const it = items.get(id);
+    // only break tasks go into a break; anything else starts after it
+    const start = t.dataset.dropBreak && it.forBreak ? Number(t.dataset.dropBreak) : Number(t.dataset.drop);
+    placeAt(id, Math.ceil(start / 5) * 5);
+  });
+  // drop back onto the inbox: take it out of the day again
+  const inboxPanel = $("#pl-inbox").closest(".pl-panel");
+  inboxPanel.addEventListener("dragover", (e) => { if (dragId && items.get(dragId)?.start) { e.preventDefault(); inboxPanel.classList.add("pl-over"); } });
+  inboxPanel.addEventListener("dragleave", (e) => { if (!inboxPanel.contains(e.relatedTarget)) inboxPanel.classList.remove("pl-over"); });
+  inboxPanel.addEventListener("drop", (e) => {
+    inboxPanel.classList.remove("pl-over");
+    const id = e.dataTransfer.getData("text/plain") || dragId;
+    if (!id || !items.get(id)?.start) return;
+    e.preventDefault();
+    patch(id, { start: null, date: null });
+  });
 
   $("#pl-quick").addEventListener("submit", (e) => {
     e.preventDefault();

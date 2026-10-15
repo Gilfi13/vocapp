@@ -105,5 +105,8 @@ Browser (iPad)                    Vercel                 Supabase
 - **Frag Claude**: Chat im Kalender (`POST /planner/chat`). Claude liest und ändert Einträge über Werkzeuge
   (`list_entries`, `save_entries`, `delete_entries`, `skip_occurrence`, `study_status`, `update_settings`) und kann
   im Web suchen. Braucht wie „Tag planen“ das Secret `ANTHROPIC_API_KEY`.
+- **To-dos einplanen**: Am Laptop To-dos aus dem Eingang auf eine freie Zeit (oder hinter einen Termin)
+  ziehen, zurück auf den Eingang ziehen nimmt sie wieder raus. Am Handy auf „frei“ tippen und ein offenes
+  To-do auswählen.
 - Am Handy: MyStudy über „Zum Home-Bildschirm“ hinzufügen; `/#kalender` öffnet direkt den Kalender
   (auch als Verknüpfung im App-Manifest).
