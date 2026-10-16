@@ -1199,3 +1199,4 @@ body:has(#view-planner:not([hidden])) .toast { z-index: 80; bottom: calc(40px + 
   .home .head-actions { width: 100%; display: flex; gap: 8px; }
   .home .head-actions .btn { flex: 1; }
 }
+.pl-clear-day { align-self: flex-start; border: 0; background: none; color: var(--blue); font-weight: 600; font-size: 13px; padding: 4px 2px; }

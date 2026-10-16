@@ -629,7 +629,12 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const prioF = field("Wie wichtig?", prio);
     const repF = field("Wiederholen", rep);
     const row1 = el("div", "pl-frow");
-    row1.append(field("Tag", date), field("Uhrzeit", start), dueF);
+    const dayF = field("Tag", date);
+    const noDay = el("button", "pl-clear-day", "Kein Tag");
+    noDay.type = "button";
+    noDay.onclick = () => { date.value = ""; start.value = ""; };
+    dayF.append(noDay);
+    row1.append(dayF, field("Uhrzeit", start), dueF);
     const row2 = el("div", "pl-frow");
     row2.append(prioF, repF);
 
@@ -680,6 +685,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       repF.hidden = !(kind === "termin" || kind === "pause");
       uniWrap.hidden = kind !== "termin";
       dueF.hidden = !(kind === "todo" || kind === "pausetask");
+      noDay.hidden = !(kind === "todo" || kind === "pausetask");
       const e = emoji || guessEmoji(title.value, kind);
       cap.textContent = e;
       cap.style.setProperty("--c", colorVar(color));
@@ -716,9 +722,12 @@ export function initPlanner({ api, show, toast, openStudy }) {
     btn(it ? "Speichern" : "Hinzufügen", "primary", () => {
       const t = title.value.trim();
       if (!t && kind !== "pause") { title.focus(); title.placeholder = "Bitte einen Titel eingeben"; return; }
-      const s = start.value || null;
+      let s = start.value || null;
       if ((kind === "termin" || kind === "pause") && !s) { start.focus(); return; }
       let d = date.value || null;
+      const isTodo = kind === "todo" || kind === "pausetask";
+      // a to-do without a day goes back to the open to-dos (Eingang), even if it had a time
+      if (isTodo && !d) s = null;
       if (s && !d) d = cur;
       const { aiPlanned, aiPrev, aiNew, ...base } = it || {};
       const data = {
