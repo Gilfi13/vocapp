@@ -1116,6 +1116,13 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
 
   /* ---------- Nacharbeiten & Sport ---------- */
 
+  // short subject names for generated tasks ("Nacharbeiten Mathe" instead of the full lecture title)
+  const SUBJECTS = [
+    [/mathe|statistik/i, "Mathe"], [/management|entscheid/i, "Management"], [/english|englisch/i, "English"],
+    [/digital enterprise|\bdem\b/i, "DEM"], [/datenbank|sql/i, "Datenbanken"], [/programm|oop|objektorient/i, "Programmieren"],
+  ];
+  const subjectOf = (it) => it.short || (SUBJECTS.find(([re]) => re.test(it.title || "")) || [])[1] || it.title;
+
   const isLecture = (it) => kindOf(it) === "termin" && (it.place === "uni" || it.lecture);
   const shortDate = (d) => `${WDS[parseYmd(d).getDay()]} ${d.slice(8)}.${d.slice(5, 7)}.`;
 
@@ -1144,7 +1151,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
         if (!next) continue;
         made.add(id);
         upsert.push({ id, data: {
-          title: `Nacharbeiten: ${lec.title}`, kind: "todo", forBreak: false, duration: Number(prefs.reviewMin) || 45,
+          title: `Nacharbeiten ${subjectOf(lec)}`, kind: "todo", forBreak: false, duration: Number(prefs.reviewMin) || 45,
           priority: 2, date: null, start: null, due: next, done: false, repeat: "none", color: "violet", emoji: "📖",
           notes: `Stoff vom ${shortDate(d)} – bis vor der nächsten Vorlesung am ${shortDate(next)}`,
           source: "review", createdAt: new Date().toISOString(),
