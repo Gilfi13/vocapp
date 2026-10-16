@@ -13,7 +13,9 @@ const SESSION_KEY = (deckId) => `vocapp.session.${me?.id}.${deckId}`;
 const LANG = { en: "Englisch", de: "Deutsch" };
 const ALL_DECKS = { id: "all", name: "Alle Stapel" };
 const KNOWN_BOX = 2; // same rule as the backend: from box 2 on a word "sitzt"
-const ROUND_SIZE = 10; // words per learning round
+// Two skills per word: "flip" = recognize it (card stack), "write" = write it by hand.
+const ROUND_SIZE = { write: 10, flip: 20 }; // words per learning round
+const MODE_KEY = "vocapp.mode";
 
 let me = null; // logged-in user {id, username, is_admin}
 
@@ -82,20 +84,40 @@ async function api(path, { method = "GET", body } = {}) {
   return data;
 }
 
+// known = can write it, recognized = recognizes it on the card (but can't write it yet)
 function cardStatus(card) {
   if (card.box >= KNOWN_BOX) return "known";
-  return card.last_reviewed ? "learning" : "fresh";
+  if (card.flip_box >= KNOWN_BOX) return "recognized";
+  return card.last_reviewed || card.flip_reviewed ? "learning" : "fresh";
 }
 
+// Per skill: box, whether it was ever practised and when it is due again.
+function skill(card, mode) {
+  return mode === "flip"
+    ? { box: Math.max(card.flip_box, card.box), seen: !!(card.flip_reviewed || card.last_reviewed), due: card.flip_reviewed ? card.flip_due : card.due_at }
+    : { box: card.box, seen: !!card.last_reviewed, due: card.due_at };
+}
+
+const isDue = (card, mode, now = Date.now()) => {
+  const s = skill(card, mode);
+  return s.seen && (!s.due || new Date(s.due).getTime() <= now);
+};
+
 function countStatus(cards) {
-  const c = { known: 0, learning: 0, fresh: 0 };
-  for (const card of cards) c[cardStatus(card)]++;
+  const c = { known: 0, recognized: 0, learning: 0, fresh: 0, due: 0 };
+  for (const card of cards) {
+    c[cardStatus(card)]++;
+    if (isDue(card, "write") || (card.flip_reviewed && isDue(card, "flip"))) c.due++;
+  }
   return c;
 }
 
-function setBar(el, known, learning, total) {
-  el.querySelector(".known").style.width = total ? `${(known / total) * 100}%` : "0";
-  el.querySelector(".learning").style.width = total ? `${(learning / total) * 100}%` : "0";
+function setBar(el, known, learning, total, recognized = 0) {
+  const pct = (n) => (total ? `${(n / total) * 100}%` : "0");
+  el.querySelector(".known").style.width = pct(known);
+  el.querySelector(".learning").style.width = pct(learning);
+  const rec = el.querySelector(".recognized");
+  if (rec) rec.style.width = pct(recognized);
 }
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -525,14 +547,17 @@ async function showHome() {
 
 function renderHero(stats) {
   const total = decks.reduce((n, d) => n + d.count, 0);
-  const known = decks.reduce((n, d) => n + d.known, 0);
-  const learning = decks.reduce((n, d) => n + d.learning, 0);
+  const sum = (key) => decks.reduce((n, d) => n + (d[key] ?? 0), 0);
+  const [known, recognized, learning, due] = [sum("known"), sum("recognized"), sum("learning"), sum("due")];
   $("#hero-known").textContent = known;
   $("#hero-total").textContent = total;
   $("#leg-known").textContent = known;
+  $("#leg-recognized").textContent = recognized;
   $("#leg-learning").textContent = learning;
-  $("#leg-fresh").textContent = total - known - learning;
-  setBar($("#hero-bar"), known, learning, total);
+  $("#leg-fresh").textContent = total - known - recognized - learning;
+  $("#leg-due").textContent = due;
+  $("#leg-due-wrap").hidden = !due;
+  setBar($("#hero-bar"), known, learning, total, recognized);
   const streak = stats?.streak ?? 0;
   const today = stats?.today ?? 0;
   $("#stat-streak").textContent = streak;
@@ -555,15 +580,18 @@ function renderDecks() {
         <button class="menu-btn" aria-label="Optionen">⋯</button>
       </div>
       <div class="deck-meta"><span class="count"></span><span class="known"></span></div>
-      <div class="stackbar"><span class="known"></span><span class="learning"></span></div>
+      <div class="stackbar v"><span class="known"></span><span class="recognized"></span><span class="learning"></span></div>
       <div class="deck-actions">
         <button class="btn small" data-act="edit">Karten</button>
         <button class="btn primary small" data-act="learn">Lernen</button>
       </div>`;
     el.querySelector(".deck-name").textContent = deck.name;
     el.querySelector(".deck-meta .count").textContent = plural(deck.count, "Karte", "Karten");
-    el.querySelector(".deck-meta .known").innerHTML = deck.count ? `<b>${deck.known}</b> sitzen` : "";
-    setBar(el.querySelector(".stackbar"), deck.known, deck.learning, deck.count);
+    el.querySelector(".deck-meta .known").innerHTML = deck.count
+      ? `<b>${deck.known}</b> schreiben · <b>${deck.known + deck.recognized}</b> erkennen` +
+        (deck.due ? ` · <span class="due-text">${deck.due} fällig</span>` : "")
+      : "";
+    setBar(el.querySelector(".stackbar"), deck.known, deck.learning, deck.count, deck.recognized);
     const learnBtn = el.querySelector('[data-act="learn"]');
     learnBtn.disabled = deck.count === 0;
     learnBtn.onclick = () => openSetup(deck);
@@ -679,7 +707,8 @@ function renderWords() {
   const visible = words.cards.filter((c) => words.filter === "all" || cardStatus(c) === words.filter);
   $("#word-empty").hidden = visible.length > 0;
 
-  const labels = { known: "Sitzt", learning: "Am Lernen", fresh: "Neu" };
+  const labels = { known: "Kann ich schreiben", recognized: "Erkenne ich", learning: "Am Lernen", fresh: "Neu" };
+  const meter = (box) => [1, 2, 3, 4, 5].map((i) => `<i class="${i <= box ? "on" : ""}"></i>`).join("");
   for (const deck of decks) {
     const cards = visible.filter((c) => c.deck_id === deck.id);
     if (!cards.length) continue;
@@ -700,7 +729,10 @@ function renderWords() {
         </div>
         <div class="word-foot">
           <span class="badge ${status}">${labels[status]}</span>
-          <span>${card.last_reviewed ? `✓ ${card.correct_count} · ✕ ${card.wrong_count}` : "noch nicht gelernt"}</span>
+          <span class="skills">
+            <span title="Erkennen (Karten)">Erkennen <span class="meter">${meter(skill(card, "flip").box)}</span></span>
+            <span title="Schreiben">Schreiben <span class="meter">${meter(card.box)}</span></span>
+          </span>
         </div>`;
       const [en, de] = el.querySelectorAll("img");
       en.src = card.english;
@@ -831,7 +863,66 @@ $("#edit-delete").addEventListener("click", () =>
 /* Learning                                                            */
 /* ------------------------------------------------------------------ */
 
-const learn = { deck: null, cards: new Map(), loaded: false, session: null, revealed: false, pending: [] };
+const learn = {
+  deck: null,
+  cards: new Map(),
+  loaded: false,
+  session: null,
+  revealed: false,
+  pending: [],
+  mode: storage(MODE_KEY) === "write" ? "write" : "flip",
+};
+
+const MODE_TEXT = {
+  flip: {
+    hint: "Schnell durch den Stapel: Karte antippen zum Umdrehen, dann nach rechts (gewusst) oder links (nochmal) wischen. Zählt fürs Erkennen.",
+    de: "Ich sehe Deutsch und überlege mir das Englische",
+    en: "Ich sehe Englisch und überlege mir das Deutsche",
+    unsure: "Nur Wörter, die ich noch nicht erkenne",
+  },
+  write: {
+    hint: "Du schreibst die Antwort mit dem Stift und vergleichst. Erst wer ein Wort schreiben kann, kann es wirklich – das zählt auch fürs Erkennen.",
+    de: "Ich sehe Deutsch und schreibe Englisch",
+    en: "Ich sehe Englisch und schreibe Deutsch",
+    unsure: "Nur Wörter, die ich noch nicht schreiben kann",
+  },
+};
+
+// still to learn in this mode
+const isUnsure = (card, mode) => skill(card, mode).box < KNOWN_BOX;
+
+function setMode(mode) {
+  learn.mode = mode;
+  storage(MODE_KEY, mode);
+  for (const b of $$("#mode-switch button")) b.classList.toggle("active", b.dataset.mode === mode);
+  const t = MODE_TEXT[mode];
+  $("#mode-hint").textContent = t.hint;
+  $('[data-hint="de"]').textContent = t.de;
+  $('[data-hint="en"]').textContent = t.en;
+  updateSetupInfo();
+}
+
+$("#mode-switch").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-mode]");
+  if (b) setMode(b.dataset.mode);
+});
+
+function updateSetupInfo() {
+  if (!learn.loaded) return;
+  const cards = [...learn.cards.values()];
+  const mode = learn.mode;
+  const c = countStatus(cards);
+  const due = cards.filter((x) => isDue(x, mode)).length;
+  const unsure = cards.filter((x) => isUnsure(x, mode)).length;
+  $("#setup-info").textContent =
+    `${plural(cards.length, "Karte", "Karten")} · ${c.known} kannst du schreiben · ${c.known + c.recognized} erkennst du` +
+    (due ? ` · ${due} fällig` : "") +
+    ` · eine Runde hat ${Math.min(ROUND_SIZE[mode], cards.length)} Wörter`;
+  const only = $("#only-unsure");
+  only.disabled = unsure === 0 || unsure === cards.length;
+  if (only.disabled) only.checked = false;
+  $("#only-unsure-label").textContent = `${MODE_TEXT[mode].unsure} (${unsure})`;
+}
 
 async function loadLearnCards() {
   const path = learn.deck.id === ALL_DECKS.id ? "/cards" : `/decks/${learn.deck.id}/cards`;
@@ -849,60 +940,56 @@ async function openSetup(deck) {
   const open = storage(SESSION_KEY(deck.id));
   $("#resume-box").hidden = !(open && open.queue?.length);
   if (open && open.queue?.length) {
-    $("#resume-info").textContent = `${LANG[open.dir]} zuerst · noch ${open.queue.length} von ${open.total} Karten`;
+    const how = open.mode === "flip" ? "Karten" : "Schreiben";
+    $("#resume-info").textContent = `${how} · ${LANG[open.dir]} zuerst · noch ${open.queue.length} von ${open.total} Karten`;
   }
+  setMode(learn.mode);
   show("view-setup");
   try {
-    const cards = await loadLearnCards();
+    await loadLearnCards();
     if (learn.deck !== deck) return; // another deck was opened meanwhile
     learn.loaded = true;
-    const { known } = countStatus(cards);
-    const unsure = cards.length - known;
-    $("#setup-info").textContent =
-      `${plural(cards.length, "Karte", "Karten")} · ${known} ${known === 1 ? "sitzt" : "sitzen"} schon` +
-      ` · eine Runde hat ${Math.min(ROUND_SIZE, cards.length)} Wörter`;
-    const only = $("#only-unsure");
-    only.disabled = unsure === 0 || unsure === cards.length;
-    if (only.disabled) only.checked = false;
-    $("#only-unsure-label").textContent = `Nur Wörter, die noch nicht sitzen (${unsure})`;
+    updateSetupInfo();
   } catch (ex) {
     toast(ex.message);
   }
 }
 
-// Pick the next ROUND_SIZE cards: words already in progress first (lowest box
-// first), then new ones, and words that already "sitzen" only when nothing else is left.
-function pickRound(cards, mix) {
+// Pick the next round like a spaced-repetition app (Anki, Quizlet):
+// 1. due words (practised before and due again), weakest first
+// 2. new words – when writing, the ones you already recognize come first
+// 3. words that are not due yet, the longest-unseen first (only to fill up)
+function pickRound(cards, mix, mode) {
   const order = mix ? shuffle([...cards]) : cards;
+  const now = Date.now();
   const rank = (c) => {
-    const st = cardStatus(c);
-    return st === "learning" ? c.box : st === "fresh" ? KNOWN_BOX : KNOWN_BOX + 1;
+    const s = skill(c, mode);
+    if (s.seen && isDue(c, mode, now)) return s.box; // 0 … 5
+    if (!s.seen) return 10 - (mode === "write" && c.flip_box >= KNOWN_BOX ? 1 : 0);
+    return 20;
   };
   const byPriority = order
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => {
-      const d = rank(a.c) - rank(b.c);
-      if (d) return d;
-      // among known words, repeat the ones not seen for the longest time
-      if (cardStatus(a.c) === "known") return String(a.c.last_reviewed).localeCompare(String(b.c.last_reviewed));
-      return a.i - b.i;
-    })
-    .slice(0, ROUND_SIZE)
+    .map((c, i) => ({ c, i, r: rank(c) }))
+    .sort((a, b) => a.r - b.r || (a.r === 20 ? String(skill(a.c, mode).due).localeCompare(String(skill(b.c, mode).due)) : a.i - b.i))
+    .slice(0, ROUND_SIZE[mode])
     .map(({ c }) => c.id);
   return mix ? shuffle(byPriority) : byPriority;
 }
 
-function startRound(dir) {
+function startRound(dir, mode = learn.mode) {
   if (!learn.loaded) return toast("Karten werden noch geladen …");
   let cards = [...learn.cards.values()];
-  if ($("#only-unsure").checked) cards = cards.filter((c) => cardStatus(c) !== "known");
+  if ($("#only-unsure").checked) cards = cards.filter((c) => isUnsure(c, mode));
   if (!cards.length) return toast("Keine Karten zum Lernen.");
-  const ids = pickRound(cards, $("#shuffle").checked);
+  const ids = pickRound(cards, $("#shuffle").checked, mode);
   learn.session = {
     deckId: learn.deck.id,
+    mode,
     dir, // side shown first
     queue: ids,
     total: ids.length,
+    answered: [], // ids answered at least once in this round
+    right: 0,
     wrong: 0,
     nowKnown: 0,
   };
@@ -913,7 +1000,7 @@ $$(".choice").forEach((btn) => btn.addEventListener("click", () => startRound(bt
 
 $("#resume-btn").addEventListener("click", () => {
   if (!learn.loaded) return toast("Karten werden noch geladen …");
-  learn.session = { wrong: 0, nowKnown: 0, ...storage(SESSION_KEY(learn.deck.id)) };
+  learn.session = { mode: "write", answered: [], right: 0, wrong: 0, nowKnown: 0, ...storage(SESSION_KEY(learn.deck.id)) };
   startLearning();
 });
 
@@ -924,8 +1011,34 @@ function saveSession() {
 function startLearning() {
   const s = learn.session;
   s.queue = s.queue.filter((id) => learn.cards.has(id)); // drop deleted cards
+  if (s.mode === "flip") {
+    show("view-flip");
+    return showFlipCard();
+  }
   show("view-learn");
   showCurrentCard();
+}
+
+// Save one answer. Only the first answer to a card in a round can move it up.
+function recordAnswer(id, correct) {
+  const s = learn.session;
+  const card = learn.cards.get(id);
+  const first = !s.answered.includes(id);
+  if (first) s.answered.push(id);
+  const before = cardStatus(card);
+  const goal = s.mode === "flip" ? ["known", "recognized"] : ["known"];
+  const saving = api(`/cards/${id}/review`, { method: "POST", body: { correct, mode: s.mode, first } })
+    .then((update) => {
+      Object.assign(card, update);
+      if (!goal.includes(before) && goal.includes(cardStatus(card))) s.nowKnown++;
+    })
+    .catch(() => {
+      // not saved: the card stays in the round so the answer isn't lost
+      if (!s.queue.includes(id)) s.queue.push(id);
+      storage(SESSION_KEY(s.deckId), s);
+      toast("Antwort nicht gespeichert – die Karte kommt nochmal dran");
+    });
+  learn.pending.push(saving);
 }
 
 function showCurrentCard() {
@@ -979,24 +1092,11 @@ function judge(correct) {
   if (!learn.revealed) return;
   const s = learn.session;
   const id = s.queue.shift();
-  const card = learn.cards.get(id);
   if (!correct) {
     s.queue.push(id);
     s.wrong++;
-  }
-  const wasKnown = cardStatus(card) === "known";
-  const saving = api(`/cards/${id}/review`, { method: "POST", body: { correct } })
-    .then((update) => {
-      Object.assign(card, update);
-      if (!wasKnown && cardStatus(card) === "known") s.nowKnown++;
-    })
-    .catch(() => {
-      // not saved: the card stays in the round so the answer isn't lost
-      if (!s.queue.includes(id)) s.queue.push(id);
-      storage(SESSION_KEY(s.deckId), s);
-      toast("Antwort nicht gespeichert – die Karte kommt nochmal dran");
-    });
-  learn.pending.push(saving);
+  } else s.right++;
+  recordAnswer(id, correct);
   showCurrentCard();
 }
 
@@ -1006,6 +1106,14 @@ $("#wrong-btn").addEventListener("click", () => judge(false));
 
 // keyboard (e.g. iPad with keyboard): space = solution, → = right, ← = wrong
 document.addEventListener("keydown", (e) => {
+  if (isVisible("view-flip")) {
+    if (e.key === " " || e.key === "Enter") {
+      e.preventDefault();
+      turnFlipCard();
+    } else if (e.key === "ArrowRight") flipJudge(true);
+    else if (e.key === "ArrowLeft") flipJudge(false);
+    return;
+  }
   if (!isVisible("view-learn")) return;
   if (e.key === " " || e.key === "Enter") {
     e.preventDefault();
@@ -1013,6 +1121,117 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "ArrowRight") judge(true);
   else if (e.key === "ArrowLeft") judge(false);
 });
+
+/* ---------- card stack: tap to flip, swipe right = gewusst, left = nochmal ---------- */
+
+const swipe = { card: $("#swipe-card"), busy: false, drag: null };
+
+function showFlipCard() {
+  const s = learn.session;
+  saveSession();
+  $("#flip-progress").style.width = `${((s.total - s.queue.length) / s.total) * 100}%`;
+  $("#flip-counter").textContent = `${s.queue.length} übrig`;
+  $("#pile-right").textContent = s.right;
+  $("#pile-wrong").textContent = s.wrong;
+  if (!s.queue.length) return finishLearning();
+
+  const card = learn.cards.get(s.queue[0]);
+  const back = s.dir === "de" ? "en" : "de";
+  learn.revealed = false;
+  const flip = $("#sflip");
+  flip.classList.add("instant");
+  flip.classList.remove("flipped");
+  void flip.offsetWidth;
+  flip.classList.remove("instant");
+  $("#sflip-front").src = s.dir === "de" ? card.german : card.english;
+  $("#sflip-back").src = s.dir === "de" ? card.english : card.german;
+  $("#sflip-front-label").textContent = LANG[s.dir];
+  $("#sflip-back-label").textContent = LANG[back];
+  $("#flip-origin").textContent =
+    s.deckId === ALL_DECKS.id ? decks.find((d) => d.id === card.deck_id)?.name ?? "" : "";
+  $("#sflip-turn").hidden = false;
+  $("#sjudge").hidden = true;
+  $("#card-stack").classList.toggle("last", s.queue.length === 1);
+}
+
+function turnFlipCard() {
+  if (swipe.busy || !learn.session?.queue.length) return;
+  const flipped = $("#sflip").classList.toggle("flipped");
+  if (flipped && !learn.revealed) {
+    learn.revealed = true;
+    $("#sflip-turn").hidden = true;
+    $("#sjudge").hidden = false;
+  }
+}
+
+// Let the card fly out to one side, then judge it.
+function flipJudge(correct) {
+  const s = learn.session;
+  if (swipe.busy || !s?.queue.length) return;
+  swipe.busy = true;
+  const el = swipe.card;
+  const dir = correct ? 1 : -1;
+  el.classList.remove("dragging");
+  el.classList.add("fly");
+  el.style.setProperty("--tint", correct ? "1" : "-1");
+  el.style.transform = `translate(${dir * 120}vw, -40px) rotate(${dir * 24}deg)`;
+  setTimeout(() => {
+    const id = s.queue.shift();
+    if (!correct) {
+      s.queue.push(id); // comes again at the end of this round
+      s.wrong++;
+    } else s.right++;
+    recordAnswer(id, correct);
+    el.classList.remove("fly");
+    el.style.transform = "";
+    el.style.removeProperty("--tint");
+    el.classList.add("enter");
+    void el.offsetWidth;
+    el.classList.remove("enter");
+    swipe.busy = false;
+    if (learn.session === s && isVisible("view-flip")) showFlipCard();
+  }, 260);
+}
+
+swipe.card.addEventListener("pointerdown", (e) => {
+  if (swipe.busy || e.button > 0) return;
+  swipe.card.setPointerCapture(e.pointerId);
+  swipe.drag = { id: e.pointerId, x: e.clientX, y: e.clientY, dx: 0, dy: 0, t: performance.now(), moved: false };
+});
+
+swipe.card.addEventListener("pointermove", (e) => {
+  const d = swipe.drag;
+  if (!d || e.pointerId !== d.id) return;
+  d.dx = e.clientX - d.x;
+  d.dy = e.clientY - d.y;
+  if (!d.moved && Math.hypot(d.dx, d.dy) < 8) return;
+  d.moved = true;
+  swipe.card.classList.add("dragging");
+  const w = swipe.card.offsetWidth || 300;
+  swipe.card.style.transform = `translate(${d.dx}px, ${d.dy * 0.3}px) rotate(${(d.dx / w) * 14}deg)`;
+  swipe.card.style.setProperty("--tint", Math.max(-1, Math.min(1, d.dx / (w * 0.35))).toFixed(2));
+});
+
+function endDrag(e) {
+  const d = swipe.drag;
+  if (!d || e.pointerId !== d.id) return;
+  swipe.drag = null;
+  swipe.card.classList.remove("dragging");
+  if (!d.moved) return turnFlipCard(); // a tap turns the card
+  const w = swipe.card.offsetWidth || 300;
+  const speed = Math.abs(d.dx) / Math.max(1, performance.now() - d.t);
+  if (e.type !== "pointercancel" && (Math.abs(d.dx) > w * 0.3 || (Math.abs(d.dx) > 40 && speed > 0.6))) {
+    return flipJudge(d.dx > 0);
+  }
+  swipe.card.style.transform = "";
+  swipe.card.style.removeProperty("--tint");
+}
+
+swipe.card.addEventListener("pointerup", endDrag);
+swipe.card.addEventListener("pointercancel", endDrag);
+$("#sflip-turn").addEventListener("click", turnFlipCard);
+$("#sright-btn").addEventListener("click", () => flipJudge(true));
+$("#swrong-btn").addEventListener("click", () => flipJudge(false));
 
 async function finishLearning() {
   const s = learn.session;
@@ -1022,8 +1241,9 @@ async function finishLearning() {
   // wait until every answer is saved; failed ones come back into the round
   await Promise.allSettled(learn.pending);
   learn.pending = [];
-  if (learn.session !== s || !isVisible("view-learn")) return; // user left meanwhile
-  if (s.queue.length) return showCurrentCard();
+  const view = s.mode === "flip" ? "view-flip" : "view-learn";
+  if (learn.session !== s || !isVisible(view)) return; // user left meanwhile
+  if (s.queue.length) return s.mode === "flip" ? showFlipCard() : showCurrentCard();
 
   storage(SESSION_KEY(s.deckId), null);
   planner.studyDone("vocab");
@@ -1035,14 +1255,16 @@ async function finishLearning() {
   show("view-done");
   const cards = [...learn.cards.values()];
   const c = countStatus(cards);
-  setBar($("#done-bar"), c.known, c.learning, cards.length);
+  setBar($("#done-bar"), c.known, c.learning, cards.length, c.recognized);
+  const gained = s.nowKnown ? ` (+${s.nowKnown} neu)` : "";
   $("#done-progress").textContent =
-    `In „${learn.deck.name}“ sitzen jetzt ${c.known} von ${cards.length} Wörtern` +
-    (s.nowKnown ? ` (+${s.nowKnown} neu)` : "");
+    s.mode === "flip"
+      ? `In „${learn.deck.name}“ erkennst du jetzt ${c.known + c.recognized} von ${cards.length} Wörtern${gained}, schreiben kannst du ${c.known}.`
+      : `In „${learn.deck.name}“ kannst du jetzt ${c.known} von ${cards.length} Wörtern schreiben${gained}.`;
 }
 
-// next round with the same settings; the picker brings the words that don't sit yet
-$("#again-btn").addEventListener("click", () => startRound(learn.session.dir));
+// next round with the same settings; the picker brings due and new words first
+$("#again-btn").addEventListener("click", () => startRound(learn.session.dir, learn.session.mode));
 $("#setup-btn").addEventListener("click", () => openSetup(learn.deck));
 
 /* ------------------------------------------------------------------ */

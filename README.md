@@ -40,8 +40,14 @@ Browser (iPad)                    Vercel                 Supabase
 - **Lernen**: Die Lernrunde (Reihenfolge, offene Karten) liegt im `localStorage`,
   sodass man jederzeit unterbrechen und weitermachen kann. Richtig → Karte fliegt raus,
   falsch → Karte kommt ans Ende des Stapels. Einzelne Stapel oder alle gemischt.
-- **Fortschritt**: Jede Karte hat eine Leitner-Box (richtig → +1, falsch → 0).
-  Ab Box 2 „sitzt“ ein Wort. Jede Antwort landet in `reviews` (Serie & „heute“).
+- **Zwei Lernmodi**: „Nur Karten“ (Stapel: antippen zum Umdrehen, rechts wischen = gewusst,
+  links = nochmal; 20 Wörter pro Runde) und „Schreiben“ (Antwort mit dem Stift; 10 Wörter).
+- **Fortschritt** getrennt nach Fähigkeit (wie Anki/Quizlet): `flip_box` = Erkennen, `box` = Schreiben,
+  je Leitner-Box 0–5 mit Fälligkeit (`flip_due`/`due_at`: 1, 3, 7, 14, 30 Tage). Ab Box 2 „erkennt“
+  man ein Wort bzw. „kann es schreiben“. Nur die erste Antwort einer Runde bringt eine Box weiter,
+  falsch → Box 0. Richtig geschrieben zählt auch fürs Erkennen; nicht erkannt setzt auch Schreiben zurück.
+  Eine Runde nimmt zuerst fällige Wörter, dann neue (beim Schreiben zuerst die, die man schon erkennt).
+  Jede Antwort landet in `reviews` (mit `mode`, für Serie & „heute“).
 - **Handschrift**: [perfect-freehand](https://github.com/steveruizok/perfect-freehand)
   (MIT, in `web/vendor/`) für glatte, druckempfindliche Striche. Alle Karten nutzen
   ein festes 3:2-Koordinatensystem (600 × 400) und werden als 900 × 600 PNG gespeichert.
@@ -91,7 +97,7 @@ Browser (iPad)                    Vercel                 Supabase
 | GET/POST | `/decks/:id/cards` | Karten laden / anlegen |
 | GET | `/cards` | alle Karten aller Stapel |
 | PUT/DELETE | `/cards/:id` | Karte ändern / löschen |
-| POST | `/cards/:id/review` | `{correct}` → neue Box & Zähler |
+| POST | `/cards/:id/review` | `{correct, mode: write\|flip, first}` → neue Boxen & Fälligkeit |
 | GET | `/stats` | `{today, streak}` (Vokabeln + Grammatik) |
 | GET | `/grammar` | eigener Lernstand pro Grammatik-Übung |
 | POST | `/grammar/review` | `{item, correct}` → neue Box & Fälligkeit |

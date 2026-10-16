@@ -171,13 +171,15 @@
         <section class="mode-card">
           <div class="mode-head">
             <h2>Vokabeln</h2>
-            <span class="mode-figure"><b id="hero-known">0</b> / <span id="hero-total">0</span> sitzen</span>
+            <span class="mode-figure"><b id="hero-known">0</b> / <span id="hero-total">0</span> kann ich schreiben</span>
           </div>
-          <div class="stackbar" id="hero-bar"><span class="known"></span><span class="learning"></span></div>
+          <div class="stackbar v" id="hero-bar"><span class="known"></span><span class="recognized"></span><span class="learning"></span></div>
           <div class="legend">
-            <span><i class="dot known"></i>Sitzt <b id="leg-known">0</b></span>
-            <span><i class="dot learning"></i>Am Lernen <b id="leg-learning">0</b></span>
+            <span><i class="dot known"></i>Schreiben <b id="leg-known">0</b></span>
+            <span><i class="dot recognized"></i>Erkennen <b id="leg-recognized">0</b></span>
+            <span><i class="dot learning v"></i>Am Lernen <b id="leg-learning">0</b></span>
             <span><i class="dot fresh"></i>Neu <b id="leg-fresh">0</b></span>
+            <span id="leg-due-wrap"><i class="dot due"></i><b id="leg-due">0</b> fällig</span>
           </div>
           <div class="mode-actions">
             <button id="learn-all-btn" class="btn primary">Alle lernen</button>
@@ -249,7 +251,8 @@
     <main class="page wide">
       <div class="chips" id="word-filters">
         <button class="chip active" data-filter="all">Alle <b></b></button>
-        <button class="chip" data-filter="known">Sitzt <b></b></button>
+        <button class="chip" data-filter="known">Kann ich schreiben <b></b></button>
+        <button class="chip" data-filter="recognized">Erkenne ich <b></b></button>
         <button class="chip" data-filter="learning">Am Lernen <b></b></button>
         <button class="chip" data-filter="fresh">Neu <b></b></button>
       </div>
@@ -307,15 +310,21 @@
         <p>Offene Lernrunde: <strong id="resume-info"></strong></p>
         <button id="resume-btn" class="btn primary">Weitermachen</button>
       </div>
+      <p class="section-label">Wie möchtest du lernen?</p>
+      <div class="segmented" id="mode-switch">
+        <button data-mode="flip"><b>Nur Karten</b><span>umdrehen &amp; wischen</span></button>
+        <button data-mode="write"><b>Schreiben</b><span>mit dem Stift</span></button>
+      </div>
+      <p class="muted small" id="mode-hint"></p>
       <p class="section-label">Welche Seite möchtest du zuerst sehen?</p>
       <div class="choice-grid">
         <button class="choice" data-dir="de">
           <span class="choice-main">Deutsch zuerst</span>
-          <span class="muted">Ich sehe Deutsch und schreibe Englisch</span>
+          <span class="muted" data-hint="de"></span>
         </button>
         <button class="choice" data-dir="en">
           <span class="choice-main">Englisch zuerst</span>
-          <span class="muted">Ich sehe Englisch und schreibe Deutsch</span>
+          <span class="muted" data-hint="en"></span>
         </button>
       </div>
       <label class="toggle"><input type="checkbox" id="shuffle" checked> Karten mischen</label>
@@ -361,13 +370,51 @@
     </main>
   </section>
 
+  <!-- Learn: card stack (flip & swipe) -->
+  <section id="view-flip" class="view fit" hidden>
+    <header class="topbar">
+      <button class="btn ghost" data-home>← Beenden</button>
+      <div class="progress"><div id="flip-progress"></div></div>
+      <div class="pill" id="flip-counter"></div>
+    </header>
+    <div class="piles">
+      <span class="pile wrong"><b id="pile-wrong">0</b> Nochmal</span>
+      <span class="muted small" id="flip-origin"></span>
+      <span class="pile right">Gewusst <b id="pile-right">0</b></span>
+    </div>
+    <main class="deck-stage">
+      <div class="card-stack" id="card-stack">
+        <div class="stack-shadow two"></div>
+        <div class="stack-shadow one"></div>
+        <div class="swipe-card" id="swipe-card">
+          <div class="flip" id="sflip">
+            <div class="flip-inner">
+              <div class="flashcard face front"><img id="sflip-front" alt=""><span class="face-label" id="sflip-front-label"></span></div>
+              <div class="flashcard face back"><img id="sflip-back" alt=""><span class="face-label" id="sflip-back-label"></span></div>
+            </div>
+          </div>
+          <div class="swipe-tag right">✓ Gewusst</div>
+          <div class="swipe-tag wrong">✕ Nochmal</div>
+        </div>
+      </div>
+      <p class="muted small swipe-hint" id="swipe-hint">Tippen zum Umdrehen · nach rechts wischen = gewusst, nach links = nochmal</p>
+    </main>
+    <div class="actionbar center" id="flip-actions">
+      <button id="sflip-turn" class="btn primary big">Umdrehen</button>
+      <div id="sjudge" class="judge" hidden>
+        <button id="swrong-btn" class="judge-btn wrong">✕ Nochmal</button>
+        <button id="sright-btn" class="judge-btn right">✓ Gewusst</button>
+      </div>
+    </div>
+  </section>
+
   <!-- Done -->
   <section id="view-done" class="view center" hidden>
     <div class="done-card">
       <div class="done-check">✓</div>
       <h1>Geschafft!</h1>
       <p class="muted" id="done-stats"></p>
-      <div class="stackbar big" id="done-bar"><span class="known"></span><span class="learning"></span></div>
+      <div class="stackbar v big" id="done-bar"><span class="known"></span><span class="recognized"></span><span class="learning"></span></div>
       <p class="muted small" id="done-progress"></p>
       <div class="row">
         <button id="again-btn" class="btn primary">Nächste Runde</button>

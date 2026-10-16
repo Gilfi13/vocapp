@@ -95,8 +95,25 @@ async function verifyToken(token: string | null): Promise<string | null> {
 
 /* ---------- validation ---------- */
 
-const CARD_FIELDS = "id, deck_id, position, english, german, box, correct_count, wrong_count, last_reviewed";
-const KNOWN_BOX = 2; // a card "sitzt" from this Leitner box on
+const PROGRESS_FIELDS =
+  "box, due_at, correct_count, wrong_count, last_reviewed, flip_box, flip_due, flip_correct, flip_wrong, flip_reviewed";
+const CARD_FIELDS = `id, deck_id, position, english, german, ${PROGRESS_FIELDS}`;
+const KNOWN_BOX = 2; // a card "sitzt" from this Leitner box on (box = schreiben, flip_box = erkennen)
+
+// Progress of a list of cards – same rules as cardStatus() in web/app.js
+function deckProgress(cards: any[]) {
+  const now = Date.now();
+  const p = { count: cards.length, known: 0, recognized: 0, learning: 0, fresh: 0, due: 0 };
+  for (const c of cards) {
+    if (c.box >= KNOWN_BOX) p.known++;
+    else if (c.flip_box >= KNOWN_BOX) p.recognized++;
+    else if (c.last_reviewed || c.flip_reviewed) p.learning++;
+    else p.fresh++;
+    const due = (d: string | null) => d && new Date(d).getTime() <= now;
+    if ((c.last_reviewed && due(c.due_at)) || (c.flip_reviewed && due(c.flip_due))) p.due++;
+  }
+  return p;
+}
 
 function isImage(value: unknown): value is string {
   return typeof value === "string" && value.startsWith("data:image/") && value.length < 2_000_000;
@@ -222,7 +239,7 @@ const CHAT_TOOLS = [
   },
   {
     name: "study_status",
-    description: "Lernstand in MyStudy: Vokabeln (wie viele sitzen) und fällige Grammatik-Übungen.",
+    description: "Lernstand in MyStudy: Vokabeln (wie viele der Nutzer erkennt und wie viele er schreiben kann) und fällige Grammatik-Übungen.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -296,13 +313,14 @@ async function runChatTool(uid: string, name: string, input: any, state: { chang
   }
   if (name === "study_status") {
     const [decks, grammar] = await Promise.all([
-      db.from("cards").select("box, last_reviewed").eq("user_id", uid),
+      db.from("cards").select("box, flip_box").eq("user_id", uid),
       db.from("grammar_progress").select("due_at").eq("user_id", uid),
     ]);
     const cards = decks.data ?? [];
     return JSON.stringify({
       vokabeln_gesamt: cards.length,
-      vokabeln_sitzen: cards.filter((c: any) => c.box >= KNOWN_BOX).length,
+      vokabeln_kann_schreiben: cards.filter((c: any) => c.box >= KNOWN_BOX).length,
+      vokabeln_erkennt: cards.filter((c: any) => c.box >= KNOWN_BOX || c.flip_box >= KNOWN_BOX).length,
       grammatik_faellig: (grammar.data ?? []).filter((g: any) => new Date(g.due_at) <= new Date()).length,
     });
   }
@@ -639,25 +657,12 @@ Deno.serve(async (req) => {
     if (method === "GET" && path === "/decks") {
       const { data, error } = await db
         .from("decks")
-        .select("id, name, created_at, cards(box, last_reviewed)")
+        .select("id, name, created_at, cards(box, due_at, last_reviewed, flip_box, flip_due, flip_reviewed)")
         .eq("user_id", uid)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return json(
-        data.map((d: any) => {
-          const cards = d.cards ?? [];
-          const known = cards.filter((c: any) => c.box >= KNOWN_BOX).length;
-          const fresh = cards.filter((c: any) => !c.last_reviewed).length;
-          return {
-            id: d.id,
-            name: d.name,
-            created_at: d.created_at,
-            count: cards.length,
-            known,
-            learning: cards.length - known - fresh,
-            fresh,
-          };
-        }),
+        data.map((d: any) => ({ id: d.id, name: d.name, created_at: d.created_at, ...deckProgress(d.cards ?? []) })),
       );
     }
 
@@ -751,13 +756,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // POST /cards/:id/review {correct} – right: one box up, wrong: back to box 0
+    // POST /cards/:id/review {correct, mode, first}
+    // mode "write" (handwriting) or "flip" (card stack); only the first answer
+    // in a round moves the box up, a wrong answer always goes back to box 0
     if (method === "POST" && seg[0] === "cards" && seg[1] && seg[2] === "review") {
-      const { correct } = await req.json();
+      const { correct, mode, first } = await req.json();
       const { data, error } = await db.rpc("record_review", {
         p_card: seg[1],
         p_user: uid,
         p_correct: correct === true,
+        p_mode: mode === "flip" ? "flip" : "write",
+        p_first: first !== false,
       });
       if (error) throw error;
       if (!data) return json({ error: "Karte nicht gefunden" }, 404);

@@ -150,12 +150,19 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .stackbar span { height: 100%; width: 0; transition: width .5s ease; }
 .stackbar .known { background: var(--blue); }
 .stackbar .learning { background: var(--blue-mid); }
+/* vocabulary: schreiben (dark) · erkennen (mid) · am lernen (hatched) · neu */
+.stackbar .recognized { background: var(--blue-mid); }
+.stackbar.v .learning, .dot.learning.v {
+  background: repeating-linear-gradient(135deg, var(--blue-mid) 0 3px, var(--blue-soft) 3px 6px);
+}
 .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--muted); }
 .legend b { color: var(--text); margin-left: 4px; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .dot.known { background: var(--blue); }
 .dot.learning { background: var(--blue-mid); }
 .dot.fresh { background: var(--fresh); }
+.dot.recognized { background: var(--blue-mid); }
+.due-text { color: #b45309; font-weight: 600; }
 
 /* ---------- Hero (overall progress) ---------- */
 .hero {
@@ -403,6 +410,108 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .badge.known { background: var(--blue); color: var(--white); }
 .badge.learning { background: var(--blue-soft); color: var(--blue); }
 .badge.fresh { background: var(--fresh); color: var(--muted); }
+.badge.recognized { background: var(--blue-mid); color: var(--white); }
+.skills { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; }
+.meter { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: 1px; }
+.meter i { width: 7px; height: 7px; border-radius: 50%; background: var(--fresh); }
+.meter i.on { background: var(--blue); }
+
+/* ---------- Setup: learning mode ---------- */
+.segmented {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  background: var(--blue-soft);
+  border-radius: 14px;
+  padding: 4px;
+  margin: 12px 0 8px;
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  border-radius: 11px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.segmented button b { font-size: 17px; color: var(--blue); }
+.segmented button.active { background: var(--white); box-shadow: var(--shadow); color: var(--text); }
+#mode-hint { margin: 0 0 4px; }
+
+/* ---------- Card stack (flip & swipe) ---------- */
+.piles { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px 0; gap: 12px; }
+.pile { font-weight: 700; font-size: 15px; padding: 6px 12px; border-radius: 999px; }
+.pile.wrong { background: #fde8e8; color: var(--red); }
+.pile.right { background: #e3f5ea; color: var(--green); }
+.deck-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 10px 20px;
+  overflow: hidden;
+}
+.card-stack {
+  position: relative;
+  width: min(calc(100vw - 40px), 640px, calc((100dvh - 290px) * 1.5));
+  aspect-ratio: 3 / 2;
+}
+.stack-shadow {
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: var(--white);
+  box-shadow: var(--card-shadow);
+}
+.stack-shadow.one { transform: translateY(12px) scale(.95); opacity: .85; }
+.stack-shadow.two { transform: translateY(24px) scale(.9); opacity: .55; }
+.card-stack.last .stack-shadow { display: none; }
+.swipe-card {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  transition: transform .26s ease;
+  --tint: 0;
+}
+.swipe-card.dragging { transition: none; cursor: grabbing; }
+.swipe-card.fly { transition: transform .26s ease-in; }
+.swipe-card.enter { transition: none; transform: scale(.94); }
+.swipe-card .flip { aspect-ratio: auto; height: 100%; }
+.swipe-card img { pointer-events: none; -webkit-user-drag: none; }
+.face-label {
+  position: absolute;
+  top: 8px;
+  left: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.swipe-tag {
+  position: absolute;
+  top: 46px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 3px solid;
+  font-weight: 800;
+  font-size: 20px;
+  background: var(--white);
+  pointer-events: none;
+}
+.swipe-tag.right { left: 18px; color: var(--green); transform: rotate(-10deg); opacity: clamp(0, var(--tint), 1); }
+.swipe-tag.wrong { right: 18px; color: var(--red); transform: rotate(10deg); opacity: clamp(0, calc(var(--tint) * -1), 1); }
+.swipe-hint { text-align: center; margin: 0; }
 
 /* ---------- Done ---------- */
 .done-card { align-items: center; text-align: center; max-width: 460px; }
@@ -840,7 +949,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
   .subject-nav .chip { flex: none; }
 
   /* writing views: action bar moves below the cards */
-  #view-learn .actionbar, #view-edit .actionbar {
+  #view-learn .actionbar, #view-edit .actionbar, #view-flip .actionbar {
     order: 3;
     flex-wrap: nowrap;
     gap: 8px;
@@ -851,7 +960,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
   #view-edit .actionbar .spacer { display: none; }
   #edit-next { flex: 1; padding: 12px 16px; font-size: 17px; }
   #edit-prev, #edit-delete { padding: 12px 12px; }
-  #reveal-btn { width: 100%; }
+  #reveal-btn, #sflip-turn { width: 100%; }
   .judge { width: 100%; gap: 10px; }
   .judge-btn { flex: 1; min-width: 0; padding: 14px 10px; }
 
