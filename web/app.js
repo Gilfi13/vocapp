@@ -1064,7 +1064,7 @@ $$("[data-home]").forEach((b) =>
 /* Start                                                               */
 /* ------------------------------------------------------------------ */
 
-const math = initMath({ api, show, toast, setBar, plural, shuffle, isVisible });
+const math = initMath({ api, show, toast, setBar, plural, shuffle, isVisible, onFinished: () => planner.studyDone("subject:mathe") });
 const subjects = initSubjects({ show, onEnglish: () => showHome(), onMath: () => math.showMath() });
 const grammar = initGrammar({ api, show, toast, setBar, plural, shuffle, isVisible, onFinished: () => planner.studyDone("grammar") });
 // Lernaufgaben im Kalender öffnen den passenden Bereich von MyStudy
@@ -1072,6 +1072,7 @@ const planner = initPlanner({
   api,
   show,
   toast,
+  userId: () => me?.id,
   openStudy(link) {
     if (link === "vocab") return openSetup(ALL_DECKS);
     if (link === "grammar") return grammar.startTraining();
@@ -1087,5 +1088,10 @@ $$("[data-subjects]").forEach((b) =>
 );
 const importer = initImport({ api, toast, plural, onDone: () => showHome() });
 
-if (storage(TOKEN_KEY)) start().catch(() => show("view-login"));
+if (storage(TOKEN_KEY)) {
+  start().catch((ex) => {
+    show("view-login");
+    if (storage(TOKEN_KEY)) toast(ex.message); // still logged in, e.g. offline
+  });
+}
 else show("view-login");

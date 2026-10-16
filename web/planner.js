@@ -55,7 +55,7 @@ const DEFAULT_PREFS = {
   // nach jeder Vorlesung eine Nacharbeiten-Aufgabe bis zur nächsten Vorlesung des Fachs
   reviewOn: true, reviewMin: 45, reviewMade: [],
 };
-const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren" };
+const LINK_LABEL = { vocab: "Vokabeln lernen", grammar: "Grammatik trainieren", "subject:mathe": "Mathe-Karten lernen" };
 
 const guessEmoji = (title, k) => { for (const [re, e] of GUESS) if (re.test(title)) return e; return KIND_DEF[k].emoji; };
 const kindOf = (it) => it.kind || "todo";
@@ -93,7 +93,7 @@ function occursOn(it, date) {
   return it.date === date;
 }
 
-export function initPlanner({ api, show, toast, openStudy }) {
+export function initPlanner({ api, show, toast, openStudy, userId }) {
   const $ = (sel) => document.querySelector(sel);
   const items = new Map();
   let prefs = { ...DEFAULT_PREFS };
@@ -212,7 +212,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const sub = $("#pl-day-sub");
     sub.textContent = "";
     const todos = list.filter((i) => kindOf(i) === "todo");
-    const termine = list.filter((i) => kindOf(i) === "termin").length;
+    const termine = list.filter((i) => kindOf(i) === "termin" && i.source !== "travel").length;
     const add = (val, label) => { const s = el("span"); s.append(el("b", null, val), ` ${label}`); sub.append(s); };
     if (rel) sub.append(el("span", null, WD[d.getDay()]));
     add(todos.length ? `${todos.filter((i) => i.done).length}/${todos.length}` : "0", todos.length === 1 ? "To-do" : "To-dos");
@@ -978,8 +978,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const placed = new Set();
     for (const s of plan.schedule) {
       if (s.start < 0 || s.start >= 1440 || placed.has(s.id)) continue;
-      placed.add(s.id);
       const old = items.get(s.id);
+      if (!old) continue; // deleted while Claude was planning
+      placed.add(s.id);
       upsert.push({ id: s.id, data: {
         ...old, date, start: fromMin(s.start), aiPlanned: by,
         aiPrev: old.aiPlanned ? old.aiPrev : { date: old.date ?? null, start: old.start ?? null },
@@ -1018,19 +1019,24 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const btn = $("#pl-plan");
     btn.disabled = true;
     btn.lastChild.textContent = "Plane …";
-    let plan = null;
-    let by = "claude";
     try {
-      plan = await claudePlan(date, ctx);
-    } catch {
-      plan = rulePlan(ctx);
-      by = "regel";
+      let plan = null;
+      let by = "claude";
+      try {
+        plan = await claudePlan(date, ctx);
+      } catch {
+        plan = rulePlan(ctx);
+        by = "regel";
+      }
+      const r = await applyPlan(date, ctx, plan, by);
+      toast(`${r.placed} eingeplant` + (r.unplanned ? ` · ${r.unplanned} passen nicht und bleiben im Eingang` : ""));
+    } catch (ex) {
+      toast(ex.message);
+    } finally {
+      planning = false;
+      btn.disabled = false;
+      btn.lastChild.textContent = "Tag planen";
     }
-    const r = await applyPlan(date, ctx, plan, by);
-    toast(`${r.placed} eingeplant` + (r.unplanned ? ` · ${r.unplanned} passen nicht und bleiben im Eingang` : ""));
-    planning = false;
-    btn.disabled = false;
-    btn.lastChild.textContent = "Tag planen";
     setTab("day");
   }
 
@@ -1065,7 +1071,10 @@ export function initPlanner({ api, show, toast, openStudy }) {
     try {
       const [decks, grammar] = await Promise.all([api("/decks"), api("/grammar")]);
       const notKnown = decks.reduce((n, d) => n + d.count - d.known, 0);
-      const due = grammar.filter((g) => new Date(g.due_at) <= new Date()).length;
+      const isDueRow = (g) => new Date(g.due_at) <= new Date();
+      // math flashcards share the progress table with grammar (ids "ma-…")
+      const due = grammar.filter((g) => !g.item_id.startsWith("ma-") && isDueRow(g)).length;
+      const mathDue = grammar.filter((g) => g.item_id.startsWith("ma-") && isDueRow(g)).length;
       const open = [...items.values()].filter(isOpenTodo);
       const upsert = [];
       const base = { kind: "todo", repeat: "none", done: false, date: null, start: null, source: "mystudy", createdAt: new Date().toISOString() };
@@ -1075,6 +1084,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
       }
       if (!open.some((x) => x.link === "grammar")) {
         upsert.push({ id: newId() + "g", data: { ...base, title: due ? `Grammatik-Training (${due} fällig)` : "Grammatik: neues Thema üben", forBreak: false, duration: due > 15 ? 30 : 20, priority: due ? 1 : 3, color: "violet", emoji: "✏️", link: "grammar" } });
+      }
+      if (!open.some((x) => x.link === "subject:mathe")) {
+        upsert.push({ id: newId() + "m", data: { ...base, title: mathDue ? `Mathe-Karteikarten (${mathDue} fällig)` : "Mathe-Karteikarten: neue Karten", forBreak: mathDue <= 15, duration: mathDue > 15 ? 20 : 10, priority: mathDue ? 2 : 3, color: "coral", emoji: "∑", link: "subject:mathe" } });
       }
       if (!upsert.length) return toast("Deine Lernaufgaben sind schon im Plan.");
       await sync(upsert);
@@ -1088,7 +1100,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
   // Called after a finished vocabulary round or grammar training.
   async function studyDone(link) {
     try {
-      if (!loaded) await load();
+      await load();
     } catch {
       return;
     }
@@ -1199,7 +1211,8 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const block = (key, start, duration, title, emoji, notes) =>
       ({ id: `tr-${date}-${key}`, data: { ...base, start: fromMin(start), duration, title, emoji, notes } });
     const dow = parseYmd(date).getDay();
-    const outOn = (prefs.trainOutDays || [1, 2, 3, 4, 5]).includes(dow);
+    const carOn = (prefs.carOutDays || []).includes(dow);
+    const outOn = !carOn && (prefs.trainOutDays || [1, 2, 3, 4, 5]).includes(dow);
     const backOn = (prefs.trainBackDays || [1, 2, 3, 4, 5]).includes(dow);
     return [
       block("a", out.dep - walkS, walkS, `Zum Bahnhof ${home}`, "🚶", ""),
@@ -1209,7 +1222,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
       block("e", back.dep, back.arr - back.dep, `${back.label || "Zug"} ${uni} → ${home}`, "🚆", back.guess ? check : "laut Fahrplan"),
       block("f", back.arr, walkS, "Heimweg", "🏠", ""),
       block("g", toMin(prefs.carDep) ?? 420, (toMin(prefs.carArr) ?? 470) - (toMin(prefs.carDep) ?? 420), prefs.carTitle || "Fahrt nach Ulm", "🚗", ""),
-    ].filter((b) => !b.id.endsWith("-g") || (prefs.carOutDays || []).includes(dow)).filter((b) => (/-[abc]$/.test(b.id) ? outOn : /-g$/.test(b.id) || backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
+    ].filter((b) => (/-[abc]$/.test(b.id) ? outOn : /-g$/.test(b.id) ? carOn : backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
   }
 
   // Keeps the travel blocks of the next days in line with lectures and settings.
@@ -1234,10 +1247,12 @@ export function initPlanner({ api, show, toast, openStudy }) {
 
   /* ---------- Claude im Kalender ---------- */
 
-  const CHAT_KEY = "planner.chat";
+  // chat history per account on this device
+  const chatKey = () => `planner.chat.${userId()}`;
   let chat = [];
-  try { chat = JSON.parse(localStorage.getItem(CHAT_KEY)) || []; } catch { chat = []; }
-  const saveChat = () => { try { localStorage.setItem(CHAT_KEY, JSON.stringify(chat.slice(-30))); } catch { /* ignore */ } };
+  const loadChat = () => { try { chat = JSON.parse(localStorage.getItem(chatKey())) || []; } catch { chat = []; } };
+  const saveChat = () => { try { localStorage.setItem(chatKey(), JSON.stringify(chat.slice(-30))); } catch { /* ignore */ } };
+  try { localStorage.removeItem("planner.chat"); } catch { /* old shared history */ }
 
   function renderChat() {
     const log = $("#pl-chat-log");
@@ -1254,6 +1269,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
   }
 
   function openChat() {
+    if (!chatting) loadChat();
     $("#pl-chat").hidden = false;
     renderChat();
     $("#pl-chat-input").focus();
