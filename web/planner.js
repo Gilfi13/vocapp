@@ -787,7 +787,7 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const tBack = el("textarea");
     tBack.value = prefs.trainsBack || "";
     tBack.placeholder = "z. B.\n16:33-17:43\n17:33-18:43";
-    const r4 = el("div", "pl-frow");
+    const r4 = el("div", "pl-frow pl-stack-phone");
     r4.append(field(`Von daheim zum Bahnhof ${prefs.homeStation}`, tWalk), field(`Bahnhof ${prefs.uniStation} → Hochschule`, tUni), field("Zugfahrt etwa", tRide));
     const dayPicker = (label, days) => {
       const chosen = new Set(days || [1, 2, 3, 4, 5]);
@@ -811,11 +811,11 @@ export function initPlanner({ api, show, toast, openStudy }) {
     const cArr = inputEl("time", prefs.carArr || "07:50", { step: 300 });
     const r6 = el("div", "pl-frow");
     r6.append(field("Los um", cDep), field("Da um", cArr));
-    const r5 = el("div", "pl-frow");
+    const r5 = el("div", "pl-frow pl-stack");
     r5.append(field(`Züge ${prefs.homeStation} → ${prefs.uniStation}`, tOut), field(`Züge ${prefs.uniStation} → ${prefs.homeStation}`, tBack));
     const about = el("textarea");
     about.value = prefs.about || "";
-    about.placeholder = "z. B. Ich studiere in Kempten, spiele Fußball beim FC Hawangen …";
+    about.placeholder = "z. B. Ich studiere an der HNU, spiele Fußball beim FC Hawangen …";
     const travelHead = el("h4", "pl-h4", "Anfahrt zur Uni");
     const travelHint = el("p", "pl-hint", "Ohne Zugliste schätzt die App die Fahrt (ca. " + prefs.rideMin + " min) und markiert sie zum Prüfen. Am genauesten wird es, wenn du deine üblichen Züge aus dem DB Navigator einträgst.");
     const acts = el("div", "pl-actions");
@@ -840,8 +840,9 @@ export function initPlanner({ api, show, toast, openStudy }) {
       catch (ex) { toast(`Nicht gespeichert: ${ex.message}`); }
     };
     acts.append(el("span", "spacer"), cancel, ok);
-    sheet.append(r1, r2, r3, field("Das soll Claude beim Planen wissen", sW),
-      travelHead, tOnWrap, r4, daysOut, daysBack, r5, daysCar, r6, travelHint, field("Über mich (für Claude)", about), acts);
+    sheet.append(el("h4", "pl-h4", "Mein Tag"), r1, r2, r3,
+      travelHead, tOnWrap, r4, daysOut, daysBack, r5, daysCar, r6, travelHint,
+      el("h4", "pl-h4", "Für Claude"), field("Das soll Claude beim Planen wissen", sW), field("Über mich", about), acts);
     sheetBg.hidden = false;
   }
 
@@ -1499,6 +1500,17 @@ export function initPlanner({ api, show, toast, openStudy }) {
     });
   }
   swipeToClose(sheet, sheet, closeSheet);
+
+  // iOS: the keyboard shrinks only the visual viewport, so lift fixed panels by its height
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const onVV = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty("--kb", `${kb}px`);
+    };
+    vv.addEventListener("resize", onVV);
+    vv.addEventListener("scroll", onVV);
+  }
   swipeToClose($("#pl-chat"), $(".pl-chat-head"), () => { $("#pl-chat").hidden = true; });
 
   let touchX = null, touchY = null;
