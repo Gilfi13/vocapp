@@ -10,7 +10,7 @@ const MAX_DUE_PER_TRAINING = 30;
 const CARDS = new Map(); // card id → { ...card, chapter }
 for (const chapter of CHAPTERS) for (const c of chapter.cards) CARDS.set(c.id, { ...c, chapter });
 
-export function initMath({ api, show, toast, setBar, plural, shuffle, isVisible }) {
+export function initMath({ api, show, toast, setBar, plural, shuffle, isVisible, onFinished }) {
   const $ = (sel) => document.querySelector(sel);
   let progress = new Map(); // card id → { box, due_at, ... }
 
@@ -222,6 +222,7 @@ export function initMath({ api, show, toast, setBar, plural, shuffle, isVisible 
       `${session.firstTry.size} von ${plural(total, "Karte", "Karten")} auf Anhieb gewusst` +
       (session.wrongOnce.size ? ` · ${session.wrongOnce.size} wiederholt` : " – perfekt!");
     show("view-math-done");
+    if (total >= 5) onFinished?.(); // a real round ticks off the math task in the calendar
   }
 
   $("#ml-flip").addEventListener("click", reveal);
