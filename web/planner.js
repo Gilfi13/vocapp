@@ -111,8 +111,21 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     items.clear();
     for (const it of data.items) { const { id, ...rest } = it; items.set(id, rest); }
     prefs = { ...DEFAULT_PREFS, ...(data.prefs || {}) };
+    shortenOldTitles();
     notes = data.notes || {};
     loaded = true;
+  }
+
+  // Older app versions gave learning tasks long names; shorten the open ones.
+  const SHORT = [[/^Vokabelrunde\b/, "Vokabeln"], [/^Grammatik(-Training\b|: )/, "Grammatik"], [/^Mathe-Karteikarten\b/, "Mathe-Karten"], [/^Sport daheim$/, "Sport"]];
+  function shortenOldTitles() {
+    const upsert = [];
+    for (const [id, it] of items) {
+      if (!isOpenTodo(it) || !["mystudy", "sport"].includes(it.source)) continue;
+      const hit = SHORT.find(([re]) => re.test(it.title || ""));
+      if (hit) upsert.push({ id, data: { ...it, title: hit[1] } });
+    }
+    if (upsert.length) sync(upsert);
   }
 
   // Save and delete entries in one request; the screen updates right away.
@@ -255,7 +268,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
       if (!nowPlaced && nowM < before) { nowPlaced = true; box.append(nowRow(nowM)); }
     };
     const gapUntil = (from, to) => {
-      if (!nowPlaced && nowM >= from && nowM < to) { putNow(to); box.append(gapRow(Math.max(from, nowM), to)); }
+      if (!nowPlaced && nowM >= from && nowM < to) { putNow(to); if (to - nowM >= 5) box.append(gapRow(nowM, to)); }
       else { putNow(from); box.append(gapRow(from, to)); }
     };
     let cursor = Math.min(dayS, ...main.map((i) => toMin(i.start)));
@@ -587,7 +600,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     sheet.append(el("div", "pl-grab"), el("h3", null, it ? "Bearbeiten" : "Neuer Eintrag"));
 
     const seg = el("div", "pl-seg");
-    const kinds = [["todo", "To-do"], ["termin", "Termin"], ["pausetask", "Pausen-Task"], ["pause", "Pause"]];
+    const kinds = [["todo", "To-do"], ["termin", "Termin"], ["pausetask", "Kleinkram"], ["pause", "Pause"]];
     for (const [k, label] of kinds) {
       const b = el("button", null, label);
       b.type = "button";
@@ -607,7 +620,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     preview.append(cap, field("Was?", title));
     const hint = el("p", "pl-hint");
 
-    const durs = el("div", "pl-durs");
+    const durs = el("div", "pl-durs pl-durs-row");
     for (const d of DURS.includes(dur) ? DURS : [...DURS, dur].sort((a, b) => a - b)) {
       const b = el("button", null, d >= 60 ? `${String(d / 60).replace(".", ",")} h` : `${d} min`);
       b.type = "button";
@@ -634,9 +647,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     noDay.type = "button";
     noDay.onclick = () => { date.value = ""; start.value = ""; };
     dayF.append(noDay);
-    row1.append(dayF, field("Uhrzeit", start), dueF);
-    const row2 = el("div", "pl-frow");
-    row2.append(prioF, repF);
+    row1.append(dayF, field("Uhrzeit", start));
 
     const swatches = el("div", "pl-swatches");
     for (const c of COLORS) {
@@ -669,14 +680,24 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     const uniBox = inputEl("checkbox", "");
     uniBox.checked = st.place === "uni";
     const uniWrap = el("label", "pl-check");
-    uniWrap.append(uniBox, el("span", null, "An der Uni – Anfahrt mit dem Zug automatisch eintragen"));
-    sheet.append(seg, preview, hint, onlyWrap, durWrap, row1, row2, uniWrap, colWrap, emoWrap, field("Notiz", noteIn));
+    uniWrap.append(uniBox, el("span", null, "An der Uni (Anfahrt automatisch)"));
+    // rarely needed fields stay folded so the sheet fits on a phone
+    const more = el("div", "pl-more");
+    const moreRow = el("div", "pl-frow");
+    moreRow.append(dueF, prioF);
+    more.append(moreRow, colWrap, emoWrap, field("Notiz", noteIn));
+    const moreBtn = el("button", "pl-more-btn", "Mehr: Frist, Farbe, Symbol, Notiz");
+    moreBtn.type = "button";
+    const showMore = (on) => { more.hidden = !on; moreBtn.hidden = on; };
+    moreBtn.onclick = () => showMore(true);
+    showMore(!!(st.due || st.notes || (st.priority && st.priority !== 2)));
+    sheet.append(seg, preview, hint, onlyWrap, durWrap, row1, repF, uniWrap, moreBtn, more);
 
     const HINT = {
-      todo: "Ohne Uhrzeit kommt es in den Eingang, und beim Planen bekommt es einen guten Platz.",
-      termin: "Fester Termin, z. B. Vorlesung oder Training. Bleibt beim Planen frei. Braucht eine Uhrzeit.",
-      pausetask: "Kleinkram für zwischendurch, z. B. eine Vokabelrunde. Kommt beim Planen in deine Pausen.",
-      pause: "Feste Pause, z. B. Mittag. Pausen-Tasks können hinein.",
+      todo: "Ohne Uhrzeit landet es im Eingang.",
+      termin: "Fester Termin mit Uhrzeit, z. B. Vorlesung.",
+      pausetask: "Kleinkram, kommt beim Planen in eine Pause.",
+      pause: "Feste Pause, z. B. Mittag.",
     };
     function paint() {
       seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.k === kind)));
@@ -1080,13 +1101,13 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
       const base = { kind: "todo", repeat: "none", done: false, date: null, start: null, source: "mystudy", createdAt: new Date().toISOString() };
       const wantRounds = Math.min(3, Math.ceil(notKnown / 10));
       for (let i = open.filter((x) => x.link === "vocab").length; i < wantRounds; i++) {
-        upsert.push({ id: newId() + i, data: { ...base, title: "Vokabelrunde (10 Wörter)", forBreak: true, duration: 10, priority: 2, color: "green", emoji: "📚", link: "vocab", notes: `${notKnown} Wörter sitzen noch nicht` } });
+        upsert.push({ id: newId() + i, data: { ...base, title: "Vokabeln", forBreak: true, duration: 10, priority: 2, color: "green", emoji: "📚", link: "vocab", notes: `${notKnown} Wörter sitzen noch nicht` } });
       }
       if (!open.some((x) => x.link === "grammar")) {
-        upsert.push({ id: newId() + "g", data: { ...base, title: due ? `Grammatik-Training (${due} fällig)` : "Grammatik: neues Thema üben", forBreak: false, duration: due > 15 ? 30 : 20, priority: due ? 1 : 3, color: "violet", emoji: "✏️", link: "grammar" } });
+        upsert.push({ id: newId() + "g", data: { ...base, title: "Grammatik", notes: due ? `${due} Übungen fällig` : "Neues Thema üben", forBreak: false, duration: due > 15 ? 30 : 20, priority: due ? 1 : 3, color: "violet", emoji: "✏️", link: "grammar" } });
       }
       if (!open.some((x) => x.link === "subject:mathe")) {
-        upsert.push({ id: newId() + "m", data: { ...base, title: mathDue ? `Mathe-Karteikarten (${mathDue} fällig)` : "Mathe-Karteikarten: neue Karten", forBreak: mathDue <= 15, duration: mathDue > 15 ? 20 : 10, priority: mathDue ? 2 : 3, color: "coral", emoji: "∑", link: "subject:mathe" } });
+        upsert.push({ id: newId() + "m", data: { ...base, title: "Mathe-Karten", notes: mathDue ? `${mathDue} Karten fällig` : "Neue Karten lernen", forBreak: mathDue <= 15, duration: mathDue > 15 ? 20 : 10, priority: mathDue ? 2 : 3, color: "coral", emoji: "∑", link: "subject:mathe" } });
       }
       if (!upsert.length) return toast("Deine Lernaufgaben sind schon im Plan.");
       await sync(upsert);
@@ -1179,7 +1200,7 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     prefs.sportMade = [...(prefs.sportMade || []), date].slice(-60);
     savePrefs();
     await save(newId(), {
-      title: "Sport daheim", kind: "todo", forBreak: false, sport: true, duration: Number(prefs.sportMin) || 45,
+      title: "Sport", kind: "todo", forBreak: false, sport: true, duration: Number(prefs.sportMin) || 45,
       priority: 2, date, start: null, done: false, repeat: "none", color: "green", emoji: "🏃",
       notes: "Vorschlag – passt es heute nicht, einfach löschen oder verschieben", source: "sport", createdAt: new Date().toISOString(),
     });
@@ -1222,11 +1243,11 @@ export function initPlanner({ api, show, toast, openStudy, userId }) {
     const outOn = !carOn && (prefs.trainOutDays || [1, 2, 3, 4, 5]).includes(dow);
     const backOn = (prefs.trainBackDays || [1, 2, 3, 4, 5]).includes(dow);
     return [
-      block("a", out.dep - walkS, walkS, `Zum Bahnhof ${home}`, "🚶", ""),
-      block("b", out.dep, out.arr - out.dep, `${out.label || "Zug"} ${home} → ${uni}`, "🚆", out.guess ? check : "laut Fahrplan"),
-      block("c", out.arr, walkU, "Zur Hochschule", "🚶", ""),
-      block("d", back.dep - walkU, walkU, `Zum Bahnhof ${uni}`, "🚶", ""),
-      block("e", back.dep, back.arr - back.dep, `${back.label || "Zug"} ${uni} → ${home}`, "🚆", back.guess ? check : "laut Fahrplan"),
+      block("a", out.dep - walkS, walkS, "Zum Bahnhof", "🚶", ""),
+      block("b", out.dep, out.arr - out.dep, `${out.label || "Zug"} → ${uni}`, "🚆", out.guess ? check : `${home} → ${uni}, laut Fahrplan`),
+      block("c", out.arr, walkU, "Zur Uni", "🚶", ""),
+      block("d", back.dep - walkU, walkU, "Zum Bahnhof", "🚶", ""),
+      block("e", back.dep, back.arr - back.dep, `${back.label || "Zug"} → ${home}`, "🚆", back.guess ? check : `${uni} → ${home}, laut Fahrplan`),
       block("f", back.arr, walkS, "Heimweg", "🏠", ""),
       block("g", toMin(prefs.carDep) ?? 420, (toMin(prefs.carArr) ?? 470) - (toMin(prefs.carDep) ?? 420), prefs.carTitle || "Fahrt nach Ulm", "🚗", ""),
     ].filter((b) => (/-[abc]$/.test(b.id) ? outOn : /-g$/.test(b.id) ? carOn : backOn) && toMin(b.data.start) >= 0 && b.data.duration > 0);
