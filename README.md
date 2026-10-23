@@ -5,7 +5,9 @@ Lern-App fürs Studium. Die Startseite zeigt eine Kachel pro Fach:
 - **Englisch**: Vokabel-Karteikarten mit Handschrift (iPad + Apple Pencil) und Grammatik.
 - **Mathe**: Karteikarten zu Symbolen und Begriffen (Angewandte Statistik und Mathematik, HNU WS 2026/27).
 - **Datenbanken**: SQL-Spickzettel für MySQL (`web/subjects/datenbanken.js`) mit Links zum Üben.
-- **DEM, Programmieren, Management**: noch leer („Kommt bald“).
+- **Programmieren**: Java-Spickzettel (`web/subjects/programmieren.js`): Grundbegriffe, JVM, Variablen,
+  Operatoren, Casting, Ein-/Ausgabe, Boolesche Logik & De Morgan, if/switch, Arrays, Schleifen, typische Fehler.
+- **DEM, Management**: noch leer („Kommt bald“).
 - **Kalender** (`web/planner.js`): Tagesplaner mit Wochenleiste, Terminen (auch wiederkehrend),
   To-dos, Pausen und Pausen-Tasks. Die Startseite zeigt eine „Heute“-Karte.
 

@@ -1,14 +1,16 @@
 // Start page: one tile per subject. Englisch opens the vocabulary + grammar page,
 // Mathe the flashcards (web/math.js), Datenbanken the MySQL cheat sheet,
+// Programmieren the Java cheat sheet,
 // the others a placeholder for now.
 import datenbanken from "./datenbanken.js";
+import programmieren from "./programmieren.js";
 
 export const SUBJECTS = [
   { id: "englisch", name: "Englisch", short: "Vokabeln & Grammatik", tag: "EN", color: "#1f6feb" },
   { id: "mathe", name: "Mathe", short: "Karteikarten: Symbole & Begriffe", tag: "∑", color: "#e5484d" },
   { id: "dem", name: "DEM", short: "Kommt bald", tag: "DEM", color: "#8e4ec6" },
   { id: "datenbanken", name: "Datenbanken", short: "SQL-Spickzettel (MySQL)", tag: "SQL", color: "#1f9d55", content: datenbanken },
-  { id: "programmieren", name: "Programmieren", short: "Kommt bald", tag: "</>", color: "#f76b15" },
+  { id: "programmieren", name: "Programmieren", short: "Java-Spickzettel: Variablen, Arrays, Schleifen", tag: "</>", color: "#f76b15", content: programmieren },
   { id: "management", name: "Management", short: "Kommt bald", tag: "MGT", color: "#0d9488" },
 ];
 

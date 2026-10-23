@@ -852,6 +852,40 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .gram pre { background: #0f1b2d; color: #e6edf6; border-radius: 12px; padding: 14px 16px; overflow-x: auto; line-height: 1.5; margin: 12px 0; }
 .gram pre code { background: none; padding: 0; font-size: 14px; color: inherit; }
 
+/* ---------- Programmieren: Java diagrams ---------- */
+.jflow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0; }
+.jflow span { background: var(--blue-soft); border: 1px solid var(--blue-line); border-radius: 10px; padding: 8px 12px; font-weight: 600; display: flex; flex-direction: column; }
+.jflow span.hl { background: var(--blue); color: #fff; border-color: var(--blue); }
+.jflow small { font-weight: 400; font-size: 12px; opacity: .8; }
+.jflow b { color: var(--blue); font-size: 14px; }
+.jvars { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; }
+.jvars div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.jvars .box { min-width: 64px; padding: 12px 10px; text-align: center; border: 2px solid var(--blue); border-radius: 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; }
+.jvars small { color: var(--muted); font-size: 12px; }
+.jarr { background: var(--blue-soft); border-radius: 12px; padding: 12px 14px; margin: 14px 0; }
+.jarr-name { margin-bottom: 8px; }
+.jarr-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.jarr-row div { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.jarr-row small { color: var(--blue); font-weight: 700; font-size: 12px; }
+.jarr-row span { width: 100%; text-align: center; background: var(--white); border: 2px solid var(--blue); margin-left: -2px; padding: 12px 4px; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; font-size: 14px; }
+.jarr-row div:first-child span { margin-left: 0; border-radius: 10px 0 0 10px; }
+.jarr-row div:last-child span { border-radius: 0 10px 10px 0; }
+.jarr p { margin: 8px 0 0; font-size: 14px; }
+.jloops { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }
+.jloops > div { border: 1px solid var(--blue-line); border-radius: 12px; padding: 4px 14px 10px; min-width: 0; }
+.jloops h3 { margin: 10px 0 0; }
+.jloops .muted { margin: 0; font-size: 13px; }
+.jloops p { font-size: 14px; margin: 6px 0; }
+.jrule { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: 18px; }
+.jrule b { color: var(--blue); }
+.gram .jtruth { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+.gram .jtruth td, .gram .jtruth th { text-align: center; }
+.gram .jtruth .eq { background: #e7f6ec; }
+@media (max-width: 700px) {
+  .jloops { grid-template-columns: 1fr; }
+  .jarr-row span { font-size: 12px; padding: 10px 2px; }
+}
+
 /* ---------- Mathe: flashcards ---------- */
 .progress-fill { height: 100%; width: 0; background: var(--blue); border-radius: 999px; transition: width .3s; }
 .m-list { display: flex; flex-direction: column; gap: 10px; }
